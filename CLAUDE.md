@@ -32,4 +32,4 @@ and says the pack is not written.
 2. Explorer search beyond the first result page; an Avalanche search source.
 3. Changes to on-chain compliance parameters (Aptos `compliance_service`).
 4. Bridge mechanism per chain (burn-and-mint vs lock-and-mint) to rule double counting in or out.
-5. Explorer search for the other funds' names (today BUIDL's only).
+5. (done 25/09) Explorer search for the other funds; it found MONY by owner key.

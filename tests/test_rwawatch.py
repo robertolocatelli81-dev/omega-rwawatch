@@ -197,11 +197,26 @@ class TestReader(unittest.TestCase):
         self.assertFalse(c["assessed"])
         self.assertIn("implementation not located", c["reason"])
 
+    def test_search_classifies_per_fund(self):
+        # BENJI: the registered EVM contracts expose no owner() → owner NOT comparable, never "same" nor "different"
+        core.rpc = FakeNode(True, owner="0x" + "ab" * 20, symbol=b"Franklin OnChain U.S. Government Money Fund")
+        u = core.classify_unregistered("arbitrum", "0x" + "33" * 20, "0x10", "BENJI")
+        self.assertIsNone(u["same_owner"])
+        self.assertIn("owner not comparable", u["class"])
+        # USYC: a key recorded for the fund on ANOTHER chain counts (owners differ per chain)
+        core.rpc = FakeNode(True, owner="0xcd636d955a95385ec5e2776b167b92e89ef6f70e", symbol=b"Circle USYC")
+        u = core.classify_unregistered("arbitrum", "0x" + "33" * 20, "0x10", "USYC")
+        self.assertTrue(u["same_owner"])
+        # JLTXX: a BlackRock-named token found under JLTXX's terms does not carry JPMorgan's name → not classified
+        core.rpc = FakeNode(True, owner="0x" + "ab" * 20, symbol=b"BlackRock USD Institutional Digital Liquidity Fund")
+        u = core.classify_unregistered("arbitrum", "0x" + "33" * 20, "0x10", "JLTXX")
+        self.assertIn("not classified", u["class"])
+
     def test_same_named_token_classified_by_owner(self):
         core.rpc = FakeNode(True, owner="0x" + "ab" * 20, symbol=b"BlackRock USD Institutional Digital Liquidity Fund")
         u = core.classify_unregistered("arbitrum", "0x" + "33" * 20, "0x10")     # name (and symbol) carry BlackRock's name
         self.assertFalse(u["same_owner"])
-        self.assertIn("NOT an issuer deployment", u["class"])
+        self.assertIn("not a deployment of the registered key", u["class"])
         core.rpc = FakeNode(True, owner="0x" + "ab" * 20, symbol=b"BUIDL")        # the common word alone: not classified
         u = core.classify_unregistered("arbitrum", "0x" + "33" * 20, "0x10")
         self.assertIn("not classified", u["class"])
@@ -384,8 +399,8 @@ class TestDiamondStellarMultiToken(unittest.TestCase):
 
     def test_unreadable_search_match_is_flagged_not_folded(self):
         # 25/09 live: six Polygon reads failed and joined "not classified" under a QUIET council
-        core.search_same_named, orig = (lambda chain: ("test", ["0x" + "44" * 20, "0x" + "55" * 20])), core.search_same_named
-        core.classify_unregistered, orig_c = (lambda ch, a, b: (_ for _ in ()).throw(core.RpcError("timeout"))
+        core.search_same_named, orig = (lambda chain: ("test", {"0x" + "44" * 20: "BUIDL", "0x" + "55" * 20: "BUIDL"})), core.search_same_named
+        core.classify_unregistered, orig_c = (lambda ch, a, b, f="BUIDL": (_ for _ in ()).throw(core.RpcError("timeout"))
                                               if a.endswith("44") else {"address": a, "class": "x"}), core.classify_unregistered
         try:
             d = core.discover("polygon", "0x10", [])
@@ -426,7 +441,7 @@ class TestCouncilNemesis(unittest.TestCase):
         self.assertNotIn("not in the previous cycle", " ".join(v["why"] for v in agents.judge(cur, prev)["votes"]))
 
     def test_chain_not_searched_last_time_has_no_new_tokens(self):
-        u = {"address": "0x" + "44" * 20, "same_owner": False, "carries_blackrock_name": True, "class": "x"}
+        u = {"address": "0x" + "44" * 20, "same_owner": False, "carries_issuer_name": True, "class": "x"}
         prev = _snap({"ethereum": 100}, not_assessed=["polygon"])
         cur = _snap({"ethereum": 100, "polygon": 7.5}, unregistered={"polygon": [u]})
         self.assertEqual(agents.judge(cur, prev)["posture"], "QUIET")

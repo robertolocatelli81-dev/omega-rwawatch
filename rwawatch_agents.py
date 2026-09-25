@@ -99,7 +99,7 @@ def _agent_owner(snapshot, previous=None):
 
 def _agent_imitations(snapshot, previous=None):
     """Unregistered tokens found by explorer search that are owned by the issuer key (a deployment to register) or carry
-    BlackRock's name (not issuer deployments): a NEW one raises ELEVATED; the known list does not. A chain that could
+    a watched issuer's name (not deployments of a recorded key): a NEW one raises ELEVATED; the known list does not. A chain that could
     not be searched is said, never 'none'."""
     def found(s):
         out = {}
@@ -116,12 +116,12 @@ def _agent_imitations(snapshot, previous=None):
     # "new" only where the previous cycle actually searched that chain (same class as the structure fix)
     new = [f"{c}/{a[:10]}" for (c, a) in now if (c, a) not in before and c in searched_before] if previous else []
     if own:
-        return "ELEVATED", f"unregistered token(s) owned by the issuer key: {own}"
+        return "ELEVATED", f"unregistered token(s) owned by a key recorded for the fund: {own}"
     if new:
         return "ELEVATED", f"new same-named token(s) since the previous cycle: {new}"
     if unreadable:
         return "ELEVATED", f"search match(es) that could not be read this run, so not classified: {unreadable}"
-    return "QUIET", f"{len(now)} unregistered token(s) carrying BlackRock's name known, none new, none owned by the issuer key"
+    return "QUIET", f"{len(now)} unregistered token(s) carrying a watched issuer's name known, none new, none owned by a recorded key"
 
 
 COUNCIL = [_agent_coverage, _agent_structure, _agent_signed_authorizations, _agent_owner, _agent_imitations]

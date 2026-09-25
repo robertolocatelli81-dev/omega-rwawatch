@@ -58,7 +58,16 @@ DISCOVERY = {
     "polygon": ("blockscout", "https://polygon.blockscout.com"),
     "bsc": ("bscscan-search", "https://bscscan.com/searchHandler"),
 }
-DISCOVERY_TERMS = ("BUIDL", "BlackRock USD Institutional")
+DISCOVERY_TERMS = ("BUIDL", "BlackRock USD Institutional")      # BUIDL's (kept: the first searched)
+# Per fund: the search terms and the issuer-name needle a same-named token is matched against (measured on Blockscout
+# 25/09/2026: the bare term "BENJI" returns a full page of unrelated memecoins, so BENJI is searched by the fund name;
+# "JPMorgan" alone returns tokenized JPMorgan Chase STOCKS, so JLTXX is searched by its ticker and fund name).
+FUND_SEARCH = {
+    "BUIDL": {"terms": DISCOVERY_TERMS, "needle": ("blackrock",)},
+    "JLTXX": {"terms": ("JLTXX", "JPMorgan OnChain"), "needle": ("jpmorgan", "j.p. morgan")},
+    "BENJI": {"terms": ("Franklin OnChain",), "needle": ("franklin",)},
+    "USYC": {"terms": ("USYC",), "needle": ("usyc",)},
+}
 # The two contract shapes the registered BUIDL deployments have (measured 25/09/2026)
 SECURITIZE_SHAPES = ({"proxy_code_bytes": 703, "implementation_slot": "slot1"},
                      {"proxy_code_bytes": 170, "implementation_slot": "eip1967"})
@@ -95,6 +104,12 @@ REGISTRY = [
      "provenance": f"{OFFICIAL}"},
     {"chain": "ethereum", "token": "JLTXX", "address": "0x09864f52B035AE22eE739dFa5c748fA080D07bD8",
      "provenance": "J.P. Morgan Asset Management press release 13/05/2026 (am.jpmorgan.com, raw HTML sha256 c3f91b60…, the only address in it)",
+     "expected_owner": "0x5ae5d4ada523985dbab22cf046599979897c8418"},
+    # MONY: FOUND by this watcher's search (owned by the key recorded for JLTXX), then confirmed on the issuer's
+    # release — the only address in it. Same Diamond shape as JLTXX (16 facets, 68 selectors, 25/09/2026).
+    {"chain": "ethereum", "token": "MONY", "address": "0x6a7c6aa2b8b8a6A891dE552bDEFFa87c3F53bD46",
+     "provenance": "J.P. Morgan Asset Management press release 15/12/2025 (am.jpmorgan.com, raw HTML sha256 3dc77e38…, "
+                   "the only address in it); found first by owner() in this watcher's search, 25/09/2026",
      "expected_owner": "0x5ae5d4ada523985dbab22cf046599979897c8418"},
     {"chain": "bsc", "token": "BUIDL", "address": "0x2D5BdC96D9C8AabBDB38c9A27398513e7E5ef84F",
      "provenance": "NOT on the official page (25/09/2026); BscScan search (is_checked, website securitize.io/blackrock/BUIDL) "
@@ -558,66 +573,83 @@ def _http_json(url, timeout=25):
 
 
 def search_same_named(chain):
-    """(status, [addresses]) of tokens an explorer lists under the watched names. Status says what was searched."""
+    """(status, {address: fund}) of tokens an explorer lists under the watched funds' names. A token found under
+    several funds' terms is attributed to the first fund searched. Status says what was searched."""
     kind, base = DISCOVERY.get(chain, (None, None))
     if kind is None:
-        return "not searched (no explorer search configured)", []
-    found, errors = set(), []
-    for term in DISCOVERY_TERMS:
-        try:
-            if kind == "blockscout":
-                d = _http_json(f"{base}/api/v2/search?q={urllib.parse.quote(term)}")
-                for it in d.get("items", []):
-                    if it.get("type") == "token" and it.get("address_hash"):
-                        found.add(it["address_hash"])
-            else:
-                d = _http_json(f"{base}?term={urllib.parse.quote(term)}&filterby=0")
-                for it in d if isinstance(d, list) else []:
-                    if str(it.get("group", "")).startswith("Tokens") and it.get("address"):
-                        found.add(it["address"])
-        except Exception as ex:                       # the explorer failed: say so, never read it as "none found"
-            errors.append(f"{term}: {type(ex).__name__}")
-    status = (f"searched {kind}, first result page per term" + (f" (errors: {'; '.join(errors)})" if errors else ""))
-    return status, sorted(found, key=str.lower)
+        return "not searched (no explorer search configured)", {}
+    found, errors = {}, []
+    for fund, spec in FUND_SEARCH.items():
+        for term in spec["terms"]:
+            try:
+                if kind == "blockscout":
+                    d = _http_json(f"{base}/api/v2/search?q={urllib.parse.quote(term)}")
+                    hits = [it["address_hash"] for it in d.get("items", [])
+                            if it.get("type") == "token" and it.get("address_hash")]
+                else:
+                    d = _http_json(f"{base}?term={urllib.parse.quote(term)}&filterby=0")
+                    hits = [it["address"] for it in (d if isinstance(d, list) else [])
+                            if str(it.get("group", "")).startswith("Tokens") and it.get("address")]
+                for a in hits:
+                    found.setdefault(a, fund)
+            except Exception as ex:                   # the explorer failed: say so, never read it as "none found"
+                errors.append(f"{term}: {type(ex).__name__}")
+    status = (f"searched {kind}, first result page per term, {len(FUND_SEARCH)} funds"
+              + (f" (errors: {'; '.join(errors)})" if errors else ""))
+    return status, dict(sorted(found.items(), key=lambda kv: kv[0].lower()))
 
 
-def classify_unregistered(chain, address, block):
+def _fund_owners(fund):
+    """Every control key recorded for a fund, all chains; empty when the fund exposes none (BENJI on EVM)."""
+    owners = {str(e.get("expected_owner", EXPECTED_OWNER)).lower() for e in REGISTRY if e["token"] == fund
+              and e.get("expected_owner", EXPECTED_OWNER)}
+    return owners
+
+
+def classify_unregistered(chain, address, block, fund="BUIDL"):
     """What a same-named, unregistered token looks like on-chain. Never a verdict of fraud: a shape and a reading."""
     t = read_token(chain, address, block)
     s = read_structure(chain, address, block)
     shape = {"proxy_code_bytes": s["proxy_code_bytes"], "implementation_slot": s["implementation_slot"]}
-    t.update({"address": address, "proxy_code_bytes": s["proxy_code_bytes"],
+    owners = _fund_owners(fund)
+    t.update({"address": address, "fund": fund, "proxy_code_bytes": s["proxy_code_bytes"],
               "implementation_slot": s["implementation_slot"],
-              "securitize_shape": shape in SECURITIZE_SHAPES, "same_owner": t.get("owner") == EXPECTED_OWNER})
-    # "BUIDL" is a common crypto word used by projects older than the fund: a symbol alone proves nothing. What can be
-    # said is only this: whether the token is owned by the issuer key, and whether it carries BlackRock's name.
-    t["carries_blackrock_name"] = "blackrock" in (t.get("name") or "").lower()
+              "securitize_shape": shape in SECURITIZE_SHAPES,
+              # None = not comparable: the fund's registered contracts expose no owner()
+              "same_owner": (str(t.get("owner")).lower() in owners) if owners else None})
+    # A ticker alone proves nothing ("BUIDL" is older than the fund). What can be said is only this: whether the token
+    # is owned by a key recorded for the fund, and whether its name carries the issuer's / fund's name.
+    name = (t.get("name") or "").lower()
+    t["carries_issuer_name"] = any(n in name for n in FUND_SEARCH[fund]["needle"])
     if t["same_owner"]:
-        t["class"] = "owned by the issuer key but not in the registry: likely a new issuer deployment — check and add by hand"
-    elif t["carries_blackrock_name"]:
-        t["class"] = ("carries BlackRock's name, not owned by the issuer key: NOT an issuer deployment "
-                      "(imitation, wrapper or third-party product — not told apart here)")
+        t["class"] = f"owned by a key recorded for {fund} but not in the registry: likely a new issuer deployment — check and add by hand"
+    elif t["carries_issuer_name"] and t["same_owner"] is None:
+        t["class"] = (f"carries the {fund} issuer's name; owner not comparable ({fund}'s registered contracts expose no "
+                      "owner()): an older or other issuer deployment, a wrapper or an imitation — not told apart here")
+    elif t["carries_issuer_name"]:
+        t["class"] = (f"carries the {fund} issuer's name, not owned by a key recorded for {fund}: not a deployment of "
+                      "the registered key (imitation, wrapper, or another product of the issuer — not told apart here)")
     else:
-        t["class"] = "shares a search term only (e.g. the common word BUIDL): not classified"
+        t["class"] = "shares a search term only (e.g. a common ticker word): not classified"
     return t
 
 
 def discover(chain, block, registered):
-    status, addrs = search_same_named(chain)
+    status, hits = search_same_named(chain)
     known = {a.lower() for a in registered}
     out = []
-    for a in addrs:
+    for a, fund in hits.items():
         if a.lower() in known:
             continue
         try:
-            out.append(classify_unregistered(chain, a, block))
+            out.append(classify_unregistered(chain, a, block, fund))
         except Exception as ex:
-            out.append({"address": a, "class": f"unreadable: {type(ex).__name__}"})
+            out.append({"address": a, "fund": fund, "class": f"unreadable: {type(ex).__name__}"})
     # kept: owned by the issuer key, or carrying BlackRock's name; tokens sharing only a search term are counted.
     # A token that could not be READ is neither (25/09: six Polygon reads failed in one cycle and silently joined the
     # "not classified" count while the council said QUIET): listed apart, and the council flags it.
     unreadable = [u["address"] for u in out if str(u.get("class", "")).startswith("unreadable")]
-    kept = [u for u in out if u.get("same_owner") or u.get("carries_blackrock_name")]
+    kept = [u for u in out if u.get("same_owner") or u.get("carries_issuer_name")]
     return {"status": status, "unregistered": kept, "unreadable": unreadable,
             "other_matches_not_classified": len(out) - len(kept) - len(unreadable)}
 

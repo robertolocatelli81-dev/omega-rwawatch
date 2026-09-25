@@ -5,7 +5,7 @@
 > assets-under-management feed: a total supply is not a fund's assets. Issuers and funds are named only to identify
 > the contracts read.
 
-Records, on a hash-chained memory, what the contracts of four tokenized money-market / treasury funds report on ten
+Records, on a hash-chained memory, what the contracts of five tokenized money-market / treasury funds report on ten
 chains — total supply, controlling key, contract structure, and whether signed-authorization entry points
 (EIP-712 / EIP-2612 / EIP-3009) or, on Aptos, signature primitives exist — each reading at a recorded block, slot,
 ledger version or Stellar ledger, from public nodes.
@@ -13,7 +13,7 @@ ledger version or Stellar ledger, from public nodes.
 | Fund token | Issuer | Chains watched |
 |------------|--------|----------------|
 | BUIDL (+ BUIDL-I) | BlackRock, tokenized by Securitize | Ethereum, Arbitrum, Optimism, Polygon, Avalanche, BNB, Solana, Aptos |
-| JLTXX | J.P. Morgan Asset Management | Ethereum (EIP-2535 Diamond) |
+| JLTXX, MONY | J.P. Morgan Asset Management | Ethereum (EIP-2535 Diamonds) |
 | BENJI | Franklin Templeton (FOBXX) | Ethereum, Polygon, Arbitrum, Avalanche, Base, Solana, Aptos, Stellar |
 | USYC | Circle | Ethereum, BNB, Solana |
 
@@ -26,8 +26,10 @@ with one exception:
   six of the seven EVM addresses, Solana and Aptos. The BNB Chain address is **not** on that page: it comes from
   BscScan, and its `owner()` is the same externally owned account as the six listed contracts.
 - **JLTXX** — J.P. Morgan Asset Management press release of 13/05/2026 (the only address in it).
+- **MONY** — found by this watcher: the search under JLTXX's terms returned a token owned by the key recorded for
+  JLTXX; J.P. Morgan's press release of 15/12/2025 lists that address, and only that one.
 - **BENJI** — [Benji DevHub, contracts](https://digitalassets.franklintempleton.com/benji/benji-contracts/). The page
-  lists BENJI on eight chains; on BNB Chain it lists **iBENJI**, a different token, not watched.
+  lists BENJI on eight chains, and separately **iBENJI** (Ethereum, BNB Chain), a different Franklin fund token, not watched.
 - **USYC** — [Circle docs, USYC smart contracts](https://developers.circle.com/tokenized/usyc/smart-contracts)
   (Ethereum, BNB, Solana; the Arc chain is not read).
 
@@ -67,7 +69,11 @@ the chain is not assessed.
    likely new issuer deployment, to be checked by hand) and whether it carries BlackRock's name while **not** being
    owned by that key (not an issuer deployment: imitation, wrapper or third-party product — not told apart). Tokens
    sharing only the common word "BUIDL" are counted, not classified; a match that could not be read is listed apart and
-   raises `ELEVATED` (it is neither). The search covers BUIDL's names only.
+   raises `ELEVATED` (it is neither). Each fund is searched by its own terms (BUIDL: `BUIDL`, `BlackRock USD
+   Institutional`; JLTXX: `JLTXX`, `JPMorgan OnChain`; BENJI: `Franklin OnChain` — the bare `BENJI` returns a page of
+   unrelated memecoins; USYC: `USYC`) and matched against its issuer's name and the keys recorded for it on any chain.
+   Where a fund's contracts expose no owner (BENJI on EVM), a same-named token's owner is **not comparable**: said,
+   never read as "different".
 5. **Council** (deterministic): coverage, address/symbol/decimals/implementation changes per (chain, token), EIP-712
    entry points appearing or disappearing, owner changes, new unregistered tokens, supply moves per token (the
    threshold is tuned on BUIDL's series and applied to every token) → `QUIET` / `ELEVATED` / `ALERT`.
@@ -119,6 +125,14 @@ Explorer search found, on the first result page, tokens carrying BlackRock's nam
 key: Ethereum 7, Polygon 12, Optimism 2, Arbitrum 1. In the 14:42 cycle six Polygon reads failed and the six tokens
 fell silently into the "not classified" count under a QUIET vote; a re-run found all 12. Fixed the same day: an
 unreadable match is now listed apart and flagged.
+
+Search for the other funds (25/09/2026, first result page, five chains with a search source), tokens carrying a
+watched issuer's name that are not registered: **owned by a key recorded for the fund**: one — `0x6a7c6aa2…` on
+Ethereum, owned by the JLTXX key, which the issuer's own release confirms as its fund MONY (now registered). **Owner
+not comparable** (BENJI): Ethereum 2 — iBENJI (on the official page, as a different Franklin token) and a token named
+exactly like the fund, 2,100 M supply, not on the official page; Polygon 3 named exactly like the fund, not on the official page. **Not owned
+by a recorded key**: JLTXX-named on Ethereum 1; USYC-named on Ethereum 3 (wrappers and an Aave market, by their
+names), Arbitrum 1 ("Hashnote USYC", supply 0), Polygon 3 named "Circle USYC" on a chain absent from Circle's list.
 
 The cycle's pack verified `PASS`, `pq_protected`, with the Python verifier and with the Node one (`oeverify.mjs`); the
 same pack with one digit of the body changed fails `pack-sha3`. A cycle with discovery takes about 8 minutes.
