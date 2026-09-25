@@ -3,6 +3,9 @@
 ## What this is
 A separate project applying the OMEGA *method* (positive control + hash-chain audit) to **public on-chain readings of
 BlackRock's BUIDL** on six EVM chains. It **VERIFIES** and records; it does **NOT** forecast, value, or rate the fund.
+Not affiliated with BlackRock or Securitize; not an official NAV/AUM feed. Registry source: BlackRock's official
+token-address page (6 of 7 EVM addresses; BNB tied by shared owner()). GitHub: create/push ONLY after Fable 5 review
+(Roberto's order, 25/09/2026).
 
 ## Hard constraint
 Lives entirely under `~/progetti/omega-rwawatch/`, own git repo, never writes into `~/omega/`. The hash-chain primitive
@@ -25,5 +28,6 @@ and says the pack is not written.
 
 ## Next steps
 1. Solana (Token-2022 mint) and Aptos (Move fungible asset) readers.
-2. Imitation-token discovery (explorer search) with the structural test used on 25/09 (Polygon had 4 same-named tokens).
+2. Explorer search beyond the first result page; an Avalanche search source.
 3. Changes to on-chain compliance parameters (Aptos `compliance_service`).
+4. Bridge mechanism per chain (burn-and-mint vs lock-and-mint) to rule double counting in or out.

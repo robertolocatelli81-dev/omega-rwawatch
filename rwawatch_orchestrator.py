@@ -28,6 +28,7 @@ MEMORY = os.path.join(HERE, "rwawatch_memory.jsonl")
 LATEST = os.path.join(HERE, "rwawatch_latest.json")
 EVIDENCE_DIR = os.path.join(HERE, "evidence")
 KEY_PATH = os.path.expanduser(os.environ.get("RWAWATCH_SIGNING_SEED", "~/.config/omega-rwawatch/signing.seed"))
+PQ_KEY_PATH = os.path.expanduser(os.environ.get("RWAWATCH_PQ_KEY", "~/.config/omega-rwawatch/mldsa65.key"))
 THR_MIN, THR_MAX, THR_STEP, THR_INIT = 0.25, 20.0, 0.25, 2.0      # % move of total supply between runs
 
 
@@ -92,7 +93,7 @@ def improve_threshold(memory):
         if q is not None and q > best_q:
             best_thr, best_q = t, q
         t += THR_STEP
-    if base_q is None or best_q > base_q:
+    if best_q > -1e9 and (base_q is None or best_q > base_q):
         return round(best_thr, 4), f"tuned -> {round(best_thr, 4)} (q={best_q:.3f})"
     return incumbent, f"hold {incumbent} (no strict improvement)"
 
@@ -116,7 +117,10 @@ def write_evidence(record):
     sig = record["snapshot"]["signal"]
     # omega-evidence refuses floats in canonical JSON (not portable): supplies go in as exact strings — the raw
     # integer per token, and the decimal total written with a fixed number of places
-    supplies = {f"{c['chain']}/{t['token']}": {"raw": t.get("total_supply_raw"), "decimals": t.get("decimals")}
+    supplies = {f"{c['chain']}/{t['token']}": {"address": t.get("address"), "chain_id": (c.get("node") or {}).get("chain_id"),
+                                               "raw": t.get("total_supply_raw"), "decimals": t.get("decimals"),
+                                               "owner": t.get("owner"), "implementation": t.get("implementation"),
+                                               "implementation_code_sha256": t.get("implementation_code_sha256")}
                 for c in sig["chains"] for t in c.get("tokens", [])}
     body = {"claim": "on-chain readings of BUIDL at the recorded blocks", "memory_self_hash": record["self_hash"],
             "total_buidl_supply_assessed_chains": f"{sig['metric']:.6f}", "supplies": supplies,
@@ -128,13 +132,29 @@ def write_evidence(record):
     P.write_pack(path, P.build_pack("rwawatch-cycle", body, scope))
     P.anchor_pack(path, os.path.join(EVIDENCE_DIR, "rwawatch_evidence.ledger.jsonl"))
     P.sign_pack(path, identity)
+    # Post-quantum co-signature (ML-DSA-65, FIPS 204) over the same bytes, when the backend is available: the pack then
+    # stays verifiable if Ed25519 alone stops being enough. Absent backend → said, the pack stays Ed25519-only.
+    pq_pub, pq_note = None, "ML-DSA-65 backend not available: Ed25519 only"
+    try:
+        from omega_evidence.pqbackends import mldsa
+        if mldsa.available():
+            if not os.path.exists(PQ_KEY_PATH):
+                os.makedirs(os.path.dirname(PQ_KEY_PATH), exist_ok=True)
+                mldsa.MlDsaFileSigner.keygen(PQ_KEY_PATH)
+                os.chmod(PQ_KEY_PATH, 0o600)
+            signer = mldsa.MlDsaFileSigner(PQ_KEY_PATH)
+            P.pq_cosign(path, signer)
+            pq_pub, pq_note = signer.public_key_b64, "Ed25519 + ML-DSA-65 co-signature"
+    except ImportError:
+        pass
     store = os.path.join(EVIDENCE_DIR, "trust.jsonl")
     reg = trust.TrustRegistry(store)
-    try:
-        reg.trust("omega-rwawatch", identity.public_key_b64)
-    except ValueError:
-        pass                                                   # already pinned with this key
-    return {"written": True, "pack": os.path.relpath(path, HERE), "public_key_b64": identity.public_key_b64}
+    if not reg.status("omega-rwawatch").get("known"):
+        reg.trust("omega-rwawatch", identity.public_key_b64, pq_pubkey=pq_pub)
+    elif pq_pub and reg.pq_pubkey("omega-rwawatch") != pq_pub:
+        reg.rotate("omega-rwawatch", identity.public_key_b64, pq_pubkey=pq_pub)   # pin the PQ key, as a recorded event
+    return {"written": True, "pack": os.path.relpath(path, HERE), "public_key_b64": identity.public_key_b64,
+            "pq_public_key_b64": pq_pub, "signatures": pq_note}
 
 
 def run_cycle(snapshot_fn=None, evidence=True):
