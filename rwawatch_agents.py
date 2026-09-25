@@ -102,8 +102,11 @@ def _agent_imitations(snapshot, previous=None):
                 out[(c["chain"], u["address"].lower())] = u
         return out
     now, before = found(snapshot), found(previous)
+    searched_before = {c["chain"] for c in (previous or {}).get("signal", {}).get("chains", [])
+                       if c.get("assessed") and "discovery" in c}
     own = [f"{c}/{a[:10]}" for (c, a), u in now.items() if u.get("same_owner")]
-    new = [f"{c}/{a[:10]}" for k, u in now.items() if k not in before for c, a in [k]] if previous else []
+    # "new" only where the previous cycle actually searched that chain (same class as the structure fix)
+    new = [f"{c}/{a[:10]}" for (c, a) in now if (c, a) not in before and c in searched_before] if previous else []
     if own:
         return "ELEVATED", f"unregistered token(s) owned by the issuer key: {own}"
     if new:

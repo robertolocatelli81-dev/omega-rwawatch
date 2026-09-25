@@ -246,6 +246,14 @@ class TestCouncilNemesis(unittest.TestCase):
         cur = _snap({"ethereum": 100, "polygon": 7.5})
         self.assertNotIn("not in the previous cycle", " ".join(v["why"] for v in agents.judge(cur, prev)["votes"]))
 
+    def test_chain_not_searched_last_time_has_no_new_tokens(self):
+        u = {"address": "0x" + "44" * 20, "same_owner": False, "carries_blackrock_name": True, "class": "x"}
+        prev = _snap({"ethereum": 100}, not_assessed=["polygon"])
+        cur = _snap({"ethereum": 100, "polygon": 7.5}, unregistered={"polygon": [u]})
+        self.assertEqual(agents.judge(cur, prev)["posture"], "QUIET")
+        prev2 = _snap({"ethereum": 100, "polygon": 7.5})                   # searched last time, now a new one appears
+        self.assertEqual(agents.judge(cur, prev2)["posture"], "ELEVATED")
+
     def test_owner_change_is_flagged(self):
         v = agents.judge(_snap({"ethereum": 100}, owner={"ethereum": "0x" + "ab" * 20}), _snap({"ethereum": 100}))
         self.assertEqual(v["posture"], "ELEVATED")
