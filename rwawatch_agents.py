@@ -121,7 +121,16 @@ def _agent_imitations(snapshot, previous=None):
         return "ELEVATED", f"new same-named token(s) since the previous cycle: {new}"
     if unreadable:
         return "ELEVATED", f"search match(es) that could not be read this run, so not classified: {unreadable}"
-    return "QUIET", f"{len(now)} unregistered token(s) carrying a watched issuer's name known, none new, none owned by a recorded key"
+    # the search stopped seeing a fund it saw last cycle: coverage lost, not "no imitation"
+    def ctl(s):
+        return {(c["chain"], f): ok for c in (s or {}).get("signal", {}).get("chains", [])
+                for f, ok in ((c.get("discovery") or {}).get("search_control") or {}).items()}
+    lost = sorted(f"{c}/{f}" for (c, f), ok in ctl(snapshot).items() if not ok and ctl(previous).get((c, f)) is True)
+    if lost:
+        return "ELEVATED", f"explorer search no longer finds the registered token of: {lost}"
+    blind = sorted(f"{c}/{f}" for (c, f), ok in ctl(snapshot).items() if not ok)
+    return "QUIET", (f"{len(now)} unregistered token(s) carrying a watched issuer's name known, none new, none owned by a "
+                     f"recorded key" + (f"; search blind (control failed) for {blind}" if blind else ""))
 
 
 COUNCIL = [_agent_coverage, _agent_structure, _agent_signed_authorizations, _agent_owner, _agent_imitations]

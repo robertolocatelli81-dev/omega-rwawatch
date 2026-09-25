@@ -65,7 +65,9 @@ DISCOVERY_TERMS = ("BUIDL", "BlackRock USD Institutional")      # BUIDL's (kept:
 FUND_SEARCH = {
     "BUIDL": {"terms": DISCOVERY_TERMS, "needle": ("blackrock",)},
     "JLTXX": {"terms": ("JLTXX", "JPMorgan OnChain"), "needle": ("jpmorgan", "j.p. morgan")},
-    "BENJI": {"terms": ("Franklin OnChain",), "needle": ("franklin",)},
+    # "Franklin Templeton BENJI" is how explorers index the OFFICIAL contracts (the search control needs it);
+    # "Franklin OnChain" finds same-named tokens that carry the fund's legal name
+    "BENJI": {"terms": ("Franklin Templeton BENJI", "Franklin OnChain"), "needle": ("franklin",)},
     "USYC": {"terms": ("USYC",), "needle": ("usyc",)},
 }
 # The two contract shapes the registered BUIDL deployments have (measured 25/09/2026)
@@ -637,6 +639,18 @@ def classify_unregistered(chain, address, block, fund="BUIDL"):
 def discover(chain, block, registered):
     status, hits = search_same_named(chain)
     known = {a.lower() for a in registered}
+    # Positive control of the SEARCH, per fund registered on this chain: its registered token must be among the hits.
+    # If not, the explorer cannot see that fund here and "nothing found" means nothing (25/09: BscScan returns [] for
+    # every USYC term, yet USYC is on BNB Chain).
+    found = {a.lower() for a in hits}
+    by_fund = {}
+    for e in REGISTRY:
+        if e["chain"] == chain and e["address"].lower() in known and e["token"] in FUND_SEARCH:
+            by_fund[e["token"]] = by_fund.get(e["token"], False) or e["address"].lower() in found
+    blind = sorted(f for f, ok in by_fund.items() if not ok)
+    if blind and not status.startswith("not searched"):
+        status += f"; search control FAILED for {', '.join(blind)} (the registered token is not in the results: " \
+                  "no finding for that fund here is meaningful)"
     out = []
     for a, fund in hits.items():
         if a.lower() in known:
@@ -650,7 +664,7 @@ def discover(chain, block, registered):
     # "not classified" count while the council said QUIET): listed apart, and the council flags it.
     unreadable = [u["address"] for u in out if str(u.get("class", "")).startswith("unreadable")]
     kept = [u for u in out if u.get("same_owner") or u.get("carries_issuer_name")]
-    return {"status": status, "unregistered": kept, "unreadable": unreadable,
+    return {"status": status, "unregistered": kept, "unreadable": unreadable, "search_control": by_fund,
             "other_matches_not_classified": len(out) - len(kept) - len(unreadable)}
 
 

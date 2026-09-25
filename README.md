@@ -70,10 +70,13 @@ the chain is not assessed.
    owned by that key (not an issuer deployment: imitation, wrapper or third-party product — not told apart). Tokens
    sharing only the common word "BUIDL" are counted, not classified; a match that could not be read is listed apart and
    raises `ELEVATED` (it is neither). Each fund is searched by its own terms (BUIDL: `BUIDL`, `BlackRock USD
-   Institutional`; JLTXX: `JLTXX`, `JPMorgan OnChain`; BENJI: `Franklin OnChain` — the bare `BENJI` returns a page of
-   unrelated memecoins; USYC: `USYC`) and matched against its issuer's name and the keys recorded for it on any chain.
+   Institutional`; JLTXX: `JLTXX`, `JPMorgan OnChain`; BENJI: `Franklin Templeton BENJI`, `Franklin OnChain` — the bare
+   `BENJI` returns a page of unrelated memecoins; USYC: `USYC`) and matched against its issuer's name and the keys recorded for it on any chain.
    Where a fund's contracts expose no owner (BENJI on EVM), a same-named token's owner is **not comparable**: said,
-   never read as "different".
+   never read as "different". **The search has its own positive control:** for each fund registered on a chain, the
+   registered token must be among the results; if it is not, the status says the search is blind for that fund there
+   and no finding for it means anything (measured 25/09/2026: BscScan returns nothing for every USYC term, so USYC on
+   BNB Chain is not searchable). A fund the search saw last cycle and no longer sees raises `ELEVATED`.
 5. **Council** (deterministic): coverage, address/symbol/decimals/implementation changes per (chain, token), EIP-712
    entry points appearing or disappearing, owner changes, new unregistered tokens, supply moves per token (the
    threshold is tuned on BUIDL's series and applied to every token) → `QUIET` / `ELEVATED` / `ALERT`.
@@ -99,7 +102,7 @@ python -m omega_evidence evidence/<pack>.json --ledger evidence/rwawatch_evidenc
 ```bash
 python3 rwawatch.py                 # one snapshot, printed, not saved
 python3 rwawatch_orchestrator.py    # one cycle, appended to the memory (+ signed pack if omega-evidence is installed)
-python3 tests/test_rwawatch.py      # 33 tests, no network, no wall clock; every write sandboxed
+python3 tests/test_rwawatch.py      # 36 tests, no network, no wall clock; every write sandboxed
 ```
 
 ## Measured (25/09/2026, cycle 14:42 UTC)
@@ -126,13 +129,21 @@ key: Ethereum 7, Polygon 12, Optimism 2, Arbitrum 1. In the 14:42 cycle six Poly
 fell silently into the "not classified" count under a QUIET vote; a re-run found all 12. Fixed the same day: an
 unreadable match is now listed apart and flagged.
 
-Search for the other funds (25/09/2026, first result page, five chains with a search source), tokens carrying a
+Search for the other funds (25/09/2026, first result page, five chains with a search source; USYC is not
+searchable on BNB Chain — search control failed), tokens carrying a
 watched issuer's name that are not registered: **owned by a key recorded for the fund**: one — `0x6a7c6aa2…` on
 Ethereum, owned by the JLTXX key, which the issuer's own release confirms as its fund MONY (now registered). **Owner
 not comparable** (BENJI): Ethereum 2 — iBENJI (on the official page, as a different Franklin token) and a token named
-exactly like the fund, 2,100 M supply, not on the official page; Polygon 3 named exactly like the fund, not on the official page. **Not owned
+exactly like the fund, 2,100 M supply, not on the official page; Polygon 6 — named like the fund's legal name or like the official contracts ("Franklin Templeton BENJI"), five with
+100,000 M supply and one with 0, none on the official page (recounted 15:15 UTC with the search control's term). **Not owned
 by a recorded key**: JLTXX-named on Ethereum 1; USYC-named on Ethereum 3 (wrappers and an Aave market, by their
 names), Arbitrum 1 ("Hashnote USYC", supply 0), Polygon 3 named "Circle USYC" on a chain absent from Circle's list.
+
+Every reading of the 14:42 cycle's kind was repeated at about 15:05 UTC on a second provider (drpc, arbitrum.io,
+avax.network, binance dataseed, base.org, optimism.io; a second Solana RPC; the Aptos fullnode at the same ledger
+version; the LOBSTR Horizon): 16/16 EVM readings identical at the same block (total supply and owner), Solana 3/3,
+Aptos 2/2, Stellar supply and signer set identical. The test suite is checked by 27 scripted mutations of its guards;
+none survives.
 
 The cycle's pack verified `PASS`, `pq_protected`, with the Python verifier and with the Node one (`oeverify.mjs`); the
 same pack with one digit of the body changed fails `pack-sha3`. A cycle with discovery takes about 8 minutes.

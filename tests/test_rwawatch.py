@@ -66,7 +66,8 @@ class TestChain(unittest.TestCase):
 class FakeNode:
     """Answers eth_* like a node: a proxy at BUIDL whose implementation lacks EIP-712, and a control token with it."""
     def __init__(self, control_has_eip712=True, chain_id=None, block_ts=1_000_000, owner=core.EXPECTED_OWNER,
-                 fail_selector=None, impl_slot=True, symbol=b"BUIDL", diamond=None):
+                 fail_selector=None, impl_slot=True, symbol=b"BUIDL", diamond=None, revert_selector=None):
+        self.revert_selector = revert_selector
         self.symbol, self.diamond = symbol, diamond      # diamond: None, or {"selectors": [...], "name_mapped": bool}
         self.control_has, self.chain_id, self.block_ts = control_has_eip712, chain_id, block_ts
         self.owner, self.fail_selector, self.impl_slot = owner, fail_selector, impl_slot
@@ -94,6 +95,8 @@ class FakeNode:
             return "0x" + "00" * 32
         if method == "eth_call":
             data = params[0]["data"]
+            if self.revert_selector and data.startswith(self.revert_selector) and addr.lower() != ctl:
+                raise core.RpcError("execution reverted")
             if self.fail_selector and data.startswith(self.fail_selector) and addr.lower() != ctl:
                 raise core.RpcError("eth_call: header not found")                # a node fault, not a revert
             if data.startswith(("0x52ef6b2c", "0xadfca15e", "0xcdffacc6")):   # EIP-2535 loupe
@@ -171,7 +174,31 @@ class TestReader(unittest.TestCase):
                 self._rpc("arbitrum", "eth_blockNumber", [])
         finally:
             ur.urlopen, core.time.sleep = real_urlopen, real_sleep
-        self.assertEqual(calls["n"], core.NETWORK_RETRIES + 1)             # retried once, then the error surfaces
+        self.assertEqual(calls["n"], 2)       # retried exactly once, then the error surfaces (a literal: 25/09 ablation
+                                              # showed NETWORK_RETRIES + 1 followed any value of the constant)
+        # and a transient fault followed by an answer is read, not lost
+        calls["n"] = 0
+
+        class _Resp:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def read(self):
+                return b'{"jsonrpc":"2.0","id":1,"result":"0x10"}'
+
+        def once(*a, **k):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise OSError("handshake timed out")
+            return _Resp()
+        ur.urlopen, core.time.sleep = once, (lambda s: None)
+        try:
+            self.assertEqual(self._rpc("arbitrum", "eth_blockNumber", []), "0x10")
+        finally:
+            ur.urlopen, core.time.sleep = real_urlopen, real_sleep
 
     def test_wrong_chain_behind_the_url_is_not_assessed(self):
         core.rpc = FakeNode(True, chain_id=42161)                          # an Arbitrum node answering for Optimism
@@ -190,6 +217,14 @@ class TestReader(unittest.TestCase):
         c = core.read_chain("polygon", ENTRY, now=NOW, discovery=False)
         self.assertFalse(c["assessed"], c)
         self.assertIn("RpcError", c["reason"])
+
+    def test_reverting_supply_is_not_assessed(self):
+        # a REVERT on totalSupply() reads as None (not an RpcError): the chain must still be NOT ASSESSED, never a
+        # token with no supply summed as zero (25/09 ablation: no test covered this branch)
+        core.rpc = FakeNode(True, revert_selector="0x18160ddd")
+        c = core.read_chain("polygon", ENTRY, now=NOW, discovery=False)
+        self.assertFalse(c["assessed"], c)
+        self.assertIn("symbol or supply not readable", c["reason"])
 
     def test_proxy_without_located_implementation_is_not_assessed(self):
         core.rpc = FakeNode(True, impl_slot=False)
@@ -411,6 +446,25 @@ class TestDiamondStellarMultiToken(unittest.TestCase):
         s["signal"]["chains"][0]["discovery"]["unreadable"] = d["unreadable"]
         self.assertEqual(agents._agent_imitations(s)[0], "ELEVATED")
 
+    def test_search_has_a_positive_control_per_fund(self):
+        # 25/09 live: BscScan returns [] for every USYC term although USYC is on BNB Chain → blind, said, never "none"
+        reg = [e for e in core.REGISTRY if e["chain"] == "bsc"]
+        buidl = next(e["address"] for e in reg if e["token"] == "BUIDL")
+        orig_s, orig_c = core.search_same_named, core.classify_unregistered
+        core.search_same_named = lambda chain: ("searched test", {buidl: "BUIDL"})
+        core.classify_unregistered = lambda ch, a, b, f="BUIDL": {"address": a, "class": "x"}
+        try:
+            d = core.discover("bsc", "0x10", [e["address"] for e in reg])
+        finally:
+            core.search_same_named, core.classify_unregistered = orig_s, orig_c
+        self.assertEqual(d["search_control"], {"BUIDL": True, "USYC": False})
+        self.assertIn("search control FAILED for USYC", d["status"])
+        prev, cur = _snap({"bsc": 1}), _snap({"bsc": 1})
+        prev["signal"]["chains"][0]["discovery"]["search_control"] = {"USYC": True}
+        cur["signal"]["chains"][0]["discovery"]["search_control"] = {"USYC": False}
+        self.assertEqual(agents._agent_imitations(cur, prev)[0], "ELEVATED")        # sight lost since last cycle
+        self.assertIn("search blind", agents._agent_imitations(cur, cur)[1])         # still blind: said, not raised
+
     def test_supply_move_is_per_token(self):
         a, b = _snap({"ethereum": 100}), _snap({"ethereum": 100})
         for s, v in ((a, 50.0), (b, 60.0)):                                  # BENJI +20 %, BUIDL unchanged
@@ -471,6 +525,10 @@ class TestSelfImprove(unittest.TestCase):
         self.assertTrue(orch.THR_MIN <= thr <= orch.THR_MAX, note)
         again, _ = orch.improve_threshold(mem + [{"snapshot": _snap({"ethereum": 121.3}), "threshold": thr}])
         self.assertTrue(orch.THR_MIN <= again <= orch.THR_MAX)
+        # the recorded note must be true: with the incumbent already the best, the cycle HOLDS, it does not "tune"
+        held, note2 = orch.improve_threshold(mem + [{"snapshot": _snap({"ethereum": 121.3}), "threshold": again}])
+        self.assertEqual(held, again)
+        self.assertTrue(note2.startswith("hold"), note2)
 
 
 class TestCycleSandboxed(unittest.TestCase):
