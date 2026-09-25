@@ -66,8 +66,8 @@ class TestChain(unittest.TestCase):
 class FakeNode:
     """Answers eth_* like a node: a proxy at BUIDL whose implementation lacks EIP-712, and a control token with it."""
     def __init__(self, control_has_eip712=True, chain_id=None, block_ts=1_000_000, owner=core.EXPECTED_OWNER,
-                 fail_selector=None, impl_slot=True, symbol=b"BUIDL"):
-        self.symbol = symbol
+                 fail_selector=None, impl_slot=True, symbol=b"BUIDL", diamond=None):
+        self.symbol, self.diamond = symbol, diamond      # diamond: None, or {"selectors": [...], "name_mapped": bool}
         self.control_has, self.chain_id, self.block_ts = control_has_eip712, chain_id, block_ts
         self.owner, self.fail_selector, self.impl_slot = owner, fail_selector, impl_slot
 
@@ -81,6 +81,8 @@ class FakeNode:
         addr = params[0]["to"] if method == "eth_call" else params[0]
         ctl = core.CONTROLS[chain][1].lower()
         if method == "eth_getCode":
+            if addr.lower() == "0x" + "f1" * 20:
+                return "0x60" + "01" * 300                                  # a facet's code
             if addr.lower() == "0x" + "11" * 20:
                 return "0x60" + "00" * 200                                  # implementation code, no EIP-712
             if addr.lower() == ctl:
@@ -94,6 +96,16 @@ class FakeNode:
             data = params[0]["data"]
             if self.fail_selector and data.startswith(self.fail_selector) and addr.lower() != ctl:
                 raise core.RpcError("eth_call: header not found")                # a node fault, not a revert
+            if data.startswith(("0x52ef6b2c", "0xadfca15e", "0xcdffacc6")):   # EIP-2535 loupe
+                if not self.diamond or addr.lower() == ctl:
+                    raise core.RpcError("execution reverted")                    # not a Diamond: the loupe reverts
+                word = lambda x: x.rjust(64, "0")
+                if data == "0x52ef6b2c":
+                    return "0x" + word("20") + word("1") + word("f1" * 20)
+                if data.startswith("0xadfca15e"):
+                    sels = self.diamond["selectors"]
+                    return "0x" + word("20") + word(hex(len(sels))[2:]) + "".join(x.ljust(64, "0") for x in sels)
+                return "0x" + word("f1" * 20 if self.diamond["name_mapped"] else "0")
             if data == "0x8da5cb5b":
                 return "0x" + "00" * 12 + self.owner[2:]
             if data == "0x3644e515":
@@ -301,9 +313,102 @@ class TestCouncil(unittest.TestCase):
         a = _snap({"ethereum": 100, "bsc": 50})
         b = _snap({"ethereum": 100}, not_assessed=["bsc"])                  # bsc missing: not a -33% move
         votes = {v["why"].split()[0]: v for v in agents.judge(b, a)["votes"]}
-        self.assertTrue(any("moved 0.000%" in v["why"] for v in agents.judge(b, a)["votes"]), votes)
+        self.assertTrue(any("BUIDL 0.000%" in v["why"] for v in agents.judge(b, a)["votes"]), votes)
         c = _snap({"ethereum": 110, "bsc": 50})
-        self.assertIn("moved 6.667%", agents.judge(c, a, 2.0)["rationale"] + " ".join(v["why"] for v in agents.judge(c, a, 2.0)["votes"]))
+        self.assertIn("BUIDL 6.667%", agents.judge(c, a, 2.0)["rationale"] + " ".join(v["why"] for v in agents.judge(c, a, 2.0)["votes"]))
+
+
+class TestDiamondStellarMultiToken(unittest.TestCase):
+    """25/09: JLTXX is an EIP-2535 Diamond; BENJI lives on Stellar too; several funds are watched at once."""
+    def setUp(self):
+        self._rpc, self._get = core.rpc, core._get_json
+
+    def tearDown(self):
+        core.rpc, core._get_json = self._rpc, self._get
+
+    def test_diamond_read_through_its_loupe(self):
+        core.rpc = FakeNode(True, impl_slot=False, diamond={"selectors": ["06fdde03", "d505accf"], "name_mapped": True})
+        c = core.read_chain("arbitrum", ENTRY, now=NOW, discovery=False)
+        self.assertTrue(c["assessed"], c)
+        t = c["tokens"][0]
+        self.assertEqual((t["implementation"], t["implementation_slot"], t["eip712_entry_points"]),
+                         ("diamond:1 facets", "eip2535", ["permit"]))
+
+    def test_diamond_whose_loupe_control_fails_is_not_assessed(self):
+        # ablation of the loupe control: name() not mapped to any facet → the loupe is not trusted, and a small proxy
+        # without implementation is NOT ASSESSED (never a false "no EIP-712")
+        core.rpc = FakeNode(True, impl_slot=False, diamond={"selectors": ["d505accf"], "name_mapped": False})
+        c = core.read_chain("arbitrum", ENTRY, now=NOW, discovery=False)
+        self.assertFalse(c["assessed"])
+        self.assertIn("implementation not located", c["reason"])
+
+    @staticmethod
+    def _xlm(passphrase=core.STELLAR_PASSPHRASE, closed="1970-01-12T13:46:40Z", control_amount="5.0000000", signers=None):
+        signers = signers if signers is not None else [{"key": "GA", "weight": 3}]
+        def get(url, timeout=25):
+            if url == core.STELLAR_HORIZON + "/":
+                return {"network_passphrase": passphrase, "history_latest_ledger": 900, "history_latest_ledger_closed_at": closed}
+            if "/assets?" in url:
+                code = "USDC" if "asset_code=USDC" in url else "BENJI"
+                amt = control_amount if code == "USDC" else "430694230.4855482"
+                return {"_embedded": {"records": [{"asset_code": code, "contract_id": "C", "flags": {"auth_required": True},
+                        "balances": {"authorized": amt, "authorized_to_maintain_liabilities": "0.0000000", "unauthorized": "0.0000000"},
+                        "claimable_balances_amount": "0.0000000", "liquidity_pools_amount": "0.0000000" if code == "USDC" else "0.0000001", "contracts_amount": "0.0000000"}]}}
+            if "/accounts/" in url:
+                return {"home_domain": "www.franklintempleton.com", "signers": signers,
+                        "thresholds": {"low_threshold": 2, "med_threshold": 2, "high_threshold": 6}}
+            raise AssertionError(url)
+        return get
+
+    def test_stellar_reads_and_gates(self):
+        e = [dict(x, expected_owner=core.stellar_signers_fingerprint({"signers": [{"key": "GA", "weight": 3}],
+             "thresholds": {"low_threshold": 2, "med_threshold": 2, "high_threshold": 6}})) for x in core.NONEVM_REGISTRY
+             if x["chain"] == "stellar"]
+        now = 1_000_000 + 10                                                 # closed_at above = 1_000_000 s
+        core._get_json = self._xlm()
+        c = core.read_stellar(e, now=now)
+        self.assertTrue(c["assessed"], c)
+        t = c["tokens"][0]
+        self.assertEqual((t["symbol"], t["total_supply_raw"], t["owner"] == t["expected_owner"]),
+                         ("BENJI", "4306942304855483", True))                # exact stroops, pool amount included
+        core._get_json = self._xlm(passphrase="Test SDF Network ; September 2015")
+        self.assertIn("not pubnet", core.read_stellar(e, now=now)["reason"])
+        core._get_json = self._xlm()
+        self.assertIn("stale node", core.read_stellar(e, now=1_000_000 + core.MAX_BLOCK_AGE_S + 1)["reason"])
+        core._get_json = self._xlm(control_amount="0.0000000")               # the control asset reads as empty
+        self.assertIn("positive control failed", core.read_stellar(e, now=now)["reason"])
+        core._get_json = self._xlm(signers=[{"key": "GA", "weight": 3}, {"key": "GZ", "weight": 6}])   # a signer added
+        snap = {"signal": {"chains_assessed": ["stellar"], "chains_not_assessed": [],
+                           "chains": [core.read_stellar(e, now=now)]}}
+        self.assertEqual(agents._agent_owner(snap)[0], "ELEVATED")
+
+    def test_unreadable_search_match_is_flagged_not_folded(self):
+        # 25/09 live: six Polygon reads failed and joined "not classified" under a QUIET council
+        core.search_same_named, orig = (lambda chain: ("test", ["0x" + "44" * 20, "0x" + "55" * 20])), core.search_same_named
+        core.classify_unregistered, orig_c = (lambda ch, a, b: (_ for _ in ()).throw(core.RpcError("timeout"))
+                                              if a.endswith("44") else {"address": a, "class": "x"}), core.classify_unregistered
+        try:
+            d = core.discover("polygon", "0x10", [])
+        finally:
+            core.search_same_named, core.classify_unregistered = orig, orig_c
+        self.assertEqual((d["unreadable"], d["other_matches_not_classified"]), (["0x" + "44" * 20], 1))
+        s = _snap({"polygon": 7})
+        s["signal"]["chains"][0]["discovery"]["unreadable"] = d["unreadable"]
+        self.assertEqual(agents._agent_imitations(s)[0], "ELEVATED")
+
+    def test_supply_move_is_per_token(self):
+        a, b = _snap({"ethereum": 100}), _snap({"ethereum": 100})
+        for s, v in ((a, 50.0), (b, 60.0)):                                  # BENJI +20 %, BUIDL unchanged
+            s["signal"]["chains"][0]["tokens"].append(dict(_token("ethereum", v), token="BENJI", expected_owner=None))
+        p, why = agents._agent_supply_move(b, a, 2.0)
+        self.assertEqual(p, "ELEVATED")
+        self.assertIn("BENJI 20.000%", why)
+        self.assertNotIn("BUIDL", why.split(":", 1)[1])
+
+    def test_token_without_control_key_is_not_owner_checked(self):
+        s = _snap({"ethereum": 100})
+        s["signal"]["chains"][0]["tokens"].append(dict(_token("ethereum", 5), token="BENJI", owner=None, expected_owner=None))
+        self.assertEqual(agents._agent_owner(s)[0], "QUIET")
 
 
 class TestCouncilNemesis(unittest.TestCase):

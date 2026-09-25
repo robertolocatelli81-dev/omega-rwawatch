@@ -66,21 +66,27 @@ def _agent_signed_authorizations(snapshot, previous=None):
 
 
 def _agent_supply_move(snapshot, previous=None, threshold_pct=2.0):
-    """Total supply over the chains assessed in BOTH snapshots moved more than the tuned threshold (in %)."""
+    """Per watched token: total supply over the chains assessed in BOTH snapshots moved more than the tuned threshold
+    (in %). The threshold is tuned on BUIDL's series and applied to every token."""
     if not previous:
         return "QUIET", "no previous snapshot to compare supply with"
     common = set(snapshot["signal"].get("chains_assessed", [])) & set(previous["signal"].get("chains_assessed", []))
 
-    def total(s):
-        return sum(t["total_supply"] for c, t in _tokens(s)
-                   if c in common and t["token"] == "BUIDL" and t.get("total_supply") is not None)
-    a, b = total(previous), total(snapshot)
-    if a <= 0:
+    def totals(s):
+        out = {}
+        for c, t in _tokens(s):
+            if c in common and t.get("total_supply") is not None:
+                out[t["token"]] = out.get(t["token"], 0.0) + t["total_supply"]
+        return out
+    a, b = totals(previous), totals(snapshot)
+    moves = {k: abs(b.get(k, 0.0) - v) / v * 100 for k, v in sorted(a.items()) if v > 0}
+    if not moves:
         return "QUIET", "no comparable supply in the previous snapshot"
-    pct = abs(b - a) / a * 100
-    if pct >= threshold_pct:
-        return "ELEVATED", f"BUIDL supply over {sorted(common)} moved {pct:.3f}% (>= {threshold_pct}%)"
-    return "QUIET", f"BUIDL supply over {sorted(common)} moved {pct:.3f}% (< {threshold_pct}%)"
+    big = {k: m for k, m in moves.items() if m >= threshold_pct}
+    shown = ", ".join(f"{k} {m:.3f}%" for k, m in moves.items())
+    if big:
+        return "ELEVATED", f"supply over {sorted(common)} moved >= {threshold_pct}%: " + ", ".join(f"{k} {m:.3f}%" for k, m in big.items())
+    return "QUIET", f"supply over {sorted(common)} moved {shown} (< {threshold_pct}%)"
 
 
 def _agent_owner(snapshot, previous=None):
@@ -88,7 +94,7 @@ def _agent_owner(snapshot, previous=None):
     recorded on 25/09/2026 (a transfer of control, or a wrong address in the registry): a human must look."""
     off = [f"{c}/{t['token']}: owner {t.get('owner')}" for c, t in _tokens(snapshot)
            if t.get("expected_owner") and str(t.get("owner")).lower() != str(t.get("expected_owner")).lower()]
-    return ("ELEVATED", "; ".join(off)) if off else ("QUIET", "every watched contract is owned by the recorded issuer key")
+    return ("ELEVATED", "; ".join(off)) if off else ("QUIET", "every watched token with a recorded control key still has it (BENJI on EVM exposes none: not checked)")
 
 
 def _agent_imitations(snapshot, previous=None):
@@ -105,12 +111,16 @@ def _agent_imitations(snapshot, previous=None):
     searched_before = {c["chain"] for c in (previous or {}).get("signal", {}).get("chains", [])
                        if c.get("assessed") and "discovery" in c}
     own = [f"{c}/{a[:10]}" for (c, a), u in now.items() if u.get("same_owner")]
+    unreadable = [f"{c['chain']}/{a[:10]}" for c in snapshot.get("signal", {}).get("chains", [])
+                  for a in (c.get("discovery") or {}).get("unreadable", [])]
     # "new" only where the previous cycle actually searched that chain (same class as the structure fix)
     new = [f"{c}/{a[:10]}" for (c, a) in now if (c, a) not in before and c in searched_before] if previous else []
     if own:
         return "ELEVATED", f"unregistered token(s) owned by the issuer key: {own}"
     if new:
         return "ELEVATED", f"new same-named token(s) since the previous cycle: {new}"
+    if unreadable:
+        return "ELEVATED", f"search match(es) that could not be read this run, so not classified: {unreadable}"
     return "QUIET", f"{len(now)} unregistered token(s) carrying BlackRock's name known, none new, none owned by the issuer key"
 
 

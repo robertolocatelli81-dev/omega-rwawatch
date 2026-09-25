@@ -122,8 +122,9 @@ def write_evidence(record):
                                                "owner": t.get("owner"), "implementation": t.get("implementation"),
                                                "implementation_code_sha256": t.get("implementation_code_sha256")}
                 for c in sig["chains"] for t in c.get("tokens", [])}
-    body = {"claim": "on-chain readings of BUIDL at the recorded blocks", "memory_self_hash": record["self_hash"],
-            "total_buidl_supply_assessed_chains": f"{sig['metric']:.6f}", "supplies": supplies,
+    body = {"claim": "on-chain readings of the watched tokenized funds (BUIDL, JLTXX, BENJI, USYC) at the recorded blocks", "memory_self_hash": record["self_hash"],
+            "total_buidl_supply_assessed_chains": f"{sig['metric']:.6f}",
+            "totals_assessed_chains": {k: f"{v:.6f}" for k, v in (sig.get("totals") or {}).items()}, "supplies": supplies,
             "chains_assessed": sig["chains_assessed"],
             "chains_not_assessed": sig["chains_not_assessed"],
             "blocks": {c["chain"]: c.get("block") for c in sig["chains"]}, "posture": record["verdict"]["posture"]}

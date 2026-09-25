@@ -1,21 +1,39 @@
 # OMEGA-RWAWatch
 
-> Independent project, not affiliated with, reviewed or endorsed by BlackRock or Securitize. It reads public on-chain
-> data only. It is **not** an official NAV, price or assets-under-management feed: a total supply is not a fund's
-> assets. BlackRock and BUIDL are named only to identify the contracts read.
+> Independent project, not affiliated with, reviewed or endorsed by BlackRock, Securitize, J.P. Morgan, Franklin
+> Templeton or Circle. It reads public on-chain data only. It is **not** an official NAV, price or
+> assets-under-management feed: a total supply is not a fund's assets. Issuers and funds are named only to identify
+> the contracts read.
 
-Records, on a hash-chained memory, what the contracts of the tokenized fund BUIDL (issued by BlackRock, tokenized by
-Securitize) report on eight chains — six EVM chains plus Solana and Aptos: total supply, controlling key, contract
-structure, and whether signed-authorization entry points (EIP-712 / EIP-2612 / EIP-3009) or, on Aptos, signature
-primitives exist — each reading at a recorded block, slot or ledger version, from public nodes.
+Records, on a hash-chained memory, what the contracts of four tokenized money-market / treasury funds report on ten
+chains — total supply, controlling key, contract structure, and whether signed-authorization entry points
+(EIP-712 / EIP-2612 / EIP-3009) or, on Aptos, signature primitives exist — each reading at a recorded block, slot,
+ledger version or Stellar ledger, from public nodes.
+
+| Fund token | Issuer | Chains watched |
+|------------|--------|----------------|
+| BUIDL (+ BUIDL-I) | BlackRock, tokenized by Securitize | Ethereum, Arbitrum, Optimism, Polygon, Avalanche, BNB, Solana, Aptos |
+| JLTXX | J.P. Morgan Asset Management | Ethereum (EIP-2535 Diamond) |
+| BENJI | Franklin Templeton (FOBXX) | Ethereum, Polygon, Arbitrum, Avalanche, Base, Solana, Aptos, Stellar |
+| USYC | Circle | Ethereum, BNB, Solana |
 
 ## Where the addresses come from
 
-Six of the seven watched EVM addresses, and the Solana and Aptos ones, are listed on BlackRock's own page
-[blackrock.com/…/blackrock-token-addresses](https://www.blackrock.com/corporate/compliance/scams-and-fraud/blackrock-token-addresses)
-(checked 25/09/2026). The BNB Chain address is **not** on that page: it comes from
-BscScan, and its `owner()` is the same externally owned account as the six listed contracts. Each run re-reads
-`owner()` and flags a change.
+Every address comes from the issuer's own page, checked 25/09/2026 (sha256 of the raw HTML recorded in `REGISTRY`),
+with one exception:
+
+- **BUIDL** — [blackrock.com/…/blackrock-token-addresses](https://www.blackrock.com/corporate/compliance/scams-and-fraud/blackrock-token-addresses):
+  six of the seven EVM addresses, Solana and Aptos. The BNB Chain address is **not** on that page: it comes from
+  BscScan, and its `owner()` is the same externally owned account as the six listed contracts.
+- **JLTXX** — J.P. Morgan Asset Management press release of 13/05/2026 (the only address in it).
+- **BENJI** — [Benji DevHub, contracts](https://digitalassets.franklintempleton.com/benji/benji-contracts/). The page
+  lists BENJI on eight chains; on BNB Chain it lists **iBENJI**, a different token, not watched.
+- **USYC** — [Circle docs, USYC smart contracts](https://developers.circle.com/tokenized/usyc/smart-contracts)
+  (Ethereum, BNB, Solana; the Arc chain is not read).
+
+Each run re-reads the controlling key and flags a change. Where a contract exposes none, nothing is claimed: the BENJI
+EVM contracts have no `owner()` and an empty EIP-1967 admin slot (control sits in Franklin's own modules, not
+watched), so their key is **not checked**.
 
 ## Each cycle
 
@@ -25,7 +43,15 @@ control is a Token-2022 mint known to carry `permanentDelegate` and `transferHoo
 readable fungible asset (USDC) plus a framework module known to use ed25519 (`0x1::account`), which the bytecode scan
 must see. On Solana the reading records the mint authority, freeze authority, extensions, permanent delegate and
 transfer-hook program; on Aptos the object owner, the issuer's Move modules (hashed: a change is an upgrade) and any
-signature primitive in them. The controlling key of every token is compared with the one recorded on 25/09/2026.
+signature primitive in them. Stellar (Horizon) is identified by its network passphrase; the control is USDC, which
+must read with a non-zero amount; the supply is the exact sum, in stroops, of every place the asset can sit (accounts,
+claimable balances, liquidity pools, contracts), and the "controlling key" is a SHA-256 fingerprint of the issuer
+account's signers and thresholds. Horizon serves current state only: the ledger is recorded before and after.
+The controlling key of every token is compared with the one recorded on 25/09/2026.
+
+An EIP-2535 Diamond (JLTXX) has no single implementation to scan: it is read through its own loupe
+(`facetAddresses`, `facetFunctionSelectors`), whose control is that `name()` must map to a facet; if it does not,
+the chain is not assessed.
 
 1. **Node identity, per chain:** the URL must answer `eth_chainId` with the expected chain, and its latest block must
    be at most 15 minutes old; otherwise the chain is **not assessed**.
@@ -40,9 +66,11 @@ signature primitive in them. The controlling key of every token is compared with
    first result page per term. Only two things are asserted about them: whether a token is owned by the issuer key (a
    likely new issuer deployment, to be checked by hand) and whether it carries BlackRock's name while **not** being
    owned by that key (not an issuer deployment: imitation, wrapper or third-party product — not told apart). Tokens
-   sharing only the common word "BUIDL" are counted, not classified.
+   sharing only the common word "BUIDL" are counted, not classified; a match that could not be read is listed apart and
+   raises `ELEVATED` (it is neither). The search covers BUIDL's names only.
 5. **Council** (deterministic): coverage, address/symbol/decimals/implementation changes per (chain, token), EIP-712
-   entry points appearing, owner changes, new unregistered tokens, supply moves → `QUIET` / `ELEVATED` / `ALERT`.
+   entry points appearing or disappearing, owner changes, new unregistered tokens, supply moves per token (the
+   threshold is tuned on BUIDL's series and applied to every token) → `QUIET` / `ELEVATED` / `ALERT`.
 6. **Evidence:** with the optional `omega-evidence` package, the cycle is written as a pack signed with Ed25519
    **and co-signed with ML-DSA-65** (FIPS 204) when the backend is available, anchored in a hash-chained ledger. The
    pack names, per token, the address, chain id, owner, implementation and the SHA-256 of its code.
@@ -54,8 +82,8 @@ python -m omega_evidence evidence/<pack>.json --ledger evidence/rwawatch_evidenc
 
 | Aspect | Detail |
 |--------|--------|
-| Chains | Ethereum (BUIDL, BUIDL-I), Arbitrum, Optimism, Polygon, Avalanche, BNB Chain, Solana, Aptos |
-| Sources | public nodes (publicnode.com; api.mainnet-beta.solana.com; api.mainnet.aptoslabs.com); explorer search APIs |
+| Chains | Ethereum, Arbitrum, Optimism, Polygon, Avalanche, BNB Chain, Base, Solana, Aptos, Stellar |
+| Sources | public nodes (publicnode.com; api.mainnet-beta.solana.com; api.mainnet.aptoslabs.com; horizon.stellar.org); explorer search APIs |
 | Memory | `rwawatch_memory.jsonl` — SHA-256 hash-chain |
 | Deps | Python stdlib; `omega-evidence` optional (signed pack; ML-DSA-65 needs `cryptography` ≥ 48) |
 | Cadence | systemd timer provided in `deploy/`, **not enabled** |
@@ -65,20 +93,36 @@ python -m omega_evidence evidence/<pack>.json --ledger evidence/rwawatch_evidenc
 ```bash
 python3 rwawatch.py                 # one snapshot, printed, not saved
 python3 rwawatch_orchestrator.py    # one cycle, appended to the memory (+ signed pack if omega-evidence is installed)
-python3 tests/test_rwawatch.py      # 27 tests, no network, no wall clock; every write sandboxed
+python3 tests/test_rwawatch.py      # 33 tests, no network, no wall clock; every write sandboxed
 ```
 
-## Measured (25/09/2026)
+## Measured (25/09/2026, cycle 14:42 UTC)
 
-Eight chains assessed, network identities as expected, node lag ≤ 15 s, positive control passed on each. No BUIDL
-contract exposes EIP-712 / EIP-2612 / EIP-3009 entry points; on Aptos no signature primitive appears in the issuer's
-modules; `owner()` is the same account on all seven EVM contracts. BUIDL supply ≈ 2,033.1 M: Solana ≈ 987.8 M,
-Avalanche ≈ 486.2 M, Ethereum ≈ 208.3 M, Aptos ≈ 161.7 M, BNB ≈ 146.5 M, Optimism ≈ 26.5 M, Arbitrum ≈ 8.6 M,
-Polygon ≈ 7.5 M (the EVM values identical to those read from a second RPC provider); BUIDL-I on Ethereum ≈ 239.7 M,
-kept apart. With BUIDL-I the total is ≈ 2.27 B, consistent with the ≈ 2.3 B reported publicly in May 2026 — a
-consistency check, not a proof that no chain double-counts a bridged supply. Explorer search found, on the first result page, tokens carrying
-BlackRock's name that are not owned by the issuer key: Ethereum 7, Polygon 12, Optimism 2, Arbitrum 1.
+Ten chains assessed, network identities as expected, positive control passed on each; every controlling key that
+exists equal to the one recorded. Total supply per token over the assessed chains:
+
+| Token | Total | Per chain | EIP-712 family |
+|-------|------:|-----------|----------------|
+| BUIDL | ≈ 2,033.3 M | Solana 987.9 · Avalanche 486.3 · Ethereum 208.3 · Aptos 161.7 · BNB 146.5 · Optimism 26.5 · Arbitrum 8.6 · Polygon 7.5 | none |
+| BUIDL-I | ≈ 239.7 M | Ethereum | none |
+| JLTXX | ≈ 849.2 M | Ethereum (Diamond: 16 facets, 68 selectors) | none |
+| BENJI | ≈ 668.0 M | Stellar 430.7 · Base 59.7 · Ethereum 48.2 · Arbitrum 48.0 · Avalanche 34.3 · Polygon 32.2 · Aptos 14.7 · Solana 0.2 | none |
+| USYC | ≈ 2,111.3 M | BNB 2,073.9 · Ethereum 37.3 · Solana 0.0001 | `DOMAIN_SEPARATOR`, `permit` on Ethereum and BNB |
+
+USYC is the only watched fund token that accepts EIP-2612 `permit` signatures; the others expose no EIP-712 entry
+point. On Aptos no signature primitive appears in the BUIDL issuer's modules. The BENJI Aptos object is owned by the
+address the official page lists as its "Authorization Module". The BUIDL EVM values were identical to those read from
+a second RPC provider in an earlier cycle the same day; with BUIDL-I the BUIDL total is ≈ 2.27 B, consistent with the
+≈ 2.3 B reported publicly in May 2026 — a consistency check, not a proof that no chain double-counts a bridged supply.
+
+Explorer search found, on the first result page, tokens carrying BlackRock's name that are not owned by the issuer
+key: Ethereum 7, Polygon 12, Optimism 2, Arbitrum 1. In the 14:42 cycle six Polygon reads failed and the six tokens
+fell silently into the "not classified" count under a QUIET vote; a re-run found all 12. Fixed the same day: an
+unreadable match is now listed apart and flagged.
+
+The cycle's pack verified `PASS`, `pq_protected`, with the Python verifier and with the Node one (`oeverify.mjs`); the
+same pack with one digit of the body changed fails `pack-sha3`. A cycle with discovery takes about 8 minutes.
 
 > **Honest scope.** It VERIFIES and RECORDS public on-chain facts at a block and tracks them over time. It does **not**
-> predict, value, or rate the fund; it does not tell an imitation from a wrapper. The hash-chain is vendored; this
+> predict, value, or rate any fund; it does not tell an imitation from a wrapper. The hash-chain is vendored; this
 > project never imports from or writes into `~/omega/`.

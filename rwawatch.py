@@ -41,11 +41,13 @@ RPC = {
     "polygon": "https://polygon-bor-rpc.publicnode.com",
     "avalanche": "https://avalanche-c-chain-rpc.publicnode.com",
     "bsc": "https://bsc-rpc.publicnode.com",
+    "base": "https://base-rpc.publicnode.com",
 }
 
 # The chain each URL must answer for (eth_chainId). A load balancer that routes to another network would otherwise
 # pass the positive control — USDC exists on every chain — and record another chain's state under this name.
-CHAIN_IDS = {"ethereum": 1, "arbitrum": 42161, "optimism": 10, "polygon": 137, "avalanche": 43114, "bsc": 56}
+CHAIN_IDS = {"ethereum": 1, "arbitrum": 42161, "optimism": 10, "polygon": 137, "avalanche": 43114, "bsc": 56,
+             "base": 8453}
 MAX_BLOCK_AGE_S = 900        # a node whose latest block is older than this is lagging: the chain is NOT ASSESSED
 
 # Where same-named tokens are searched for (explorer search APIs; a chain without one is reported "not searched").
@@ -70,6 +72,12 @@ OFFICIAL = f"listed on {OFFICIAL_PAGE}"
 # of this issuer's key.
 EXPECTED_OWNER = "0xe01605f6b6dc593b7d2917f4a0940db2a625b09e"
 
+# Other issuers' official address lists (checked 25/09/2026; sha256 of the raw HTML as fetched)
+BENJI_PAGE = "https://digitalassets.franklintempleton.com/benji/benji-contracts/"
+BENJI_OFFICIAL = f"listed on {BENJI_PAGE} (Benji DevHub, raw HTML sha256 58176ad2…)"
+USYC_PAGE = "https://developers.circle.com/tokenized/usyc/smart-contracts"
+USYC_OFFICIAL = f"listed on {USYC_PAGE} (Circle docs, raw HTML sha256 a6105f97…)"
+
 # The addresses watched, each with where it was found (25/09/2026). Structure fingerprints are READ each run, not
 # asserted here, so a change of implementation shows up as a change in the record.
 REGISTRY = [
@@ -85,9 +93,27 @@ REGISTRY = [
      "provenance": f"{OFFICIAL}"},
     {"chain": "avalanche", "token": "BUIDL", "address": "0x53FC82f14F009009b440a706e31c9021E1196A2F",
      "provenance": f"{OFFICIAL}"},
+    {"chain": "ethereum", "token": "JLTXX", "address": "0x09864f52B035AE22eE739dFa5c748fA080D07bD8",
+     "provenance": "J.P. Morgan Asset Management press release 13/05/2026 (am.jpmorgan.com, raw HTML sha256 c3f91b60…, the only address in it)",
+     "expected_owner": "0x5ae5d4ada523985dbab22cf046599979897c8418"},
     {"chain": "bsc", "token": "BUIDL", "address": "0x2D5BdC96D9C8AabBDB38c9A27398513e7E5ef84F",
      "provenance": "NOT on the official page (25/09/2026); BscScan search (is_checked, website securitize.io/blackrock/BUIDL) "
                    "and owner() equal to the owner of the six officially listed contracts"},
+] + [
+    # Franklin Templeton BENJI (FOBXX): no owner() on these contracts and an empty EIP-1967 admin slot (25/09/2026) —
+    # control sits in Franklin's own modules, not watched here; expected_owner None = no owner check, said, not faked
+    {"chain": ch, "token": "BENJI", "address": a, "provenance": BENJI_OFFICIAL, "expected_owner": None}
+    for ch, a in (("ethereum", "0x3DDc84940Ab509C11B20B76B466933f40b750dc9"),
+                  ("polygon", "0x408A634B8a8f0dE729B48574a3a7Ec3fE820B00A"),
+                  ("arbitrum", "0xB9e4765BCE2609bC1949592059B17Ea72fEe6C6A"),
+                  ("avalanche", "0xE08b4c1005603427420e64252a8b120cacE4D122"),
+                  ("base", "0x60CfC2b186a4CF647486e42c42B11cC6D571d1E4"))
+] + [
+    # Circle USYC: owner() an externally owned account on each chain (measured 25/09/2026)
+    {"chain": "ethereum", "token": "USYC", "address": "0x136471a34f6ef19fE571EFFC1CA711fdb8E49f2b",
+     "provenance": USYC_OFFICIAL, "expected_owner": "0x13ff8cabb86edf94a2df4f98773bda4005182dd6"},
+    {"chain": "bsc", "token": "USYC", "address": "0x8D0fA28f221eB5735BC71d3a0Da67EE5bC821311",
+     "provenance": USYC_OFFICIAL, "expected_owner": "0xcd636d955a95385ec5e2776b167b92e89ef6f70e"},
 ]
 
 # Positive controls: tokens that DO expose EIP-712 on each chain. If the reader cannot see it there, it cannot be
@@ -99,6 +125,7 @@ CONTROLS = {
     "polygon": ("USDC", "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359"),
     "avalanche": ("USDC", "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E"),
     "bsc": ("Cake-LP", "0x0eD7e52944161450477ee417DE9Cd3a859b14fD0"),
+    "base": ("USDC", "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"),
 }
 
 # ───────────────────────── non-EVM chains (same method: network identity, freshness, positive control, readings) ──
@@ -111,7 +138,23 @@ NONEVM_REGISTRY = [
      "provenance": f"{OFFICIAL}", "expected_owner": "APm3MWbXfMMKAWgsDVnxcAGbLjvRxubPu1A8a5SA2kbJ"},
     {"chain": "aptos", "token": "BUIDL", "address": "0x50038be55be5b964cfa32cf128b5cf05f123959f286b4cc02b86cafd48945f89",
      "provenance": f"{OFFICIAL}", "expected_owner": "0x4de5876d8a8e2be7af6af9f3ca94d9e4fafb24b5f4a5848078d8eb08f08e808a"},
+    # BENJI on Solana: the mint is its own mint authority (a program-derived setup, measured 25/09/2026)
+    {"chain": "solana", "token": "BENJI", "address": "5Tu84fKBpe9vfXeotjvfvWdWbAjy3hqsExvuHgFqFxA1",
+     "provenance": BENJI_OFFICIAL, "expected_owner": "5Tu84fKBpe9vfXeotjvfvWdWbAjy3hqsExvuHgFqFxA1"},
+    {"chain": "solana", "token": "USYC", "address": "7LWanZteUKtvFjv4MHYgKXXdAuCQYFPJysL9pxxdRQGn",
+     "provenance": USYC_OFFICIAL, "expected_owner": "DZ7j2YLDq7847t2HtCWaDQUTpLJ4BinPGsY8w9Aai63y"},
+    # BENJI on Aptos: the object owner is the address the official page lists as "Authorization Module"
+    {"chain": "aptos", "token": "BENJI", "address": "0x7b5e9cac3433e9202f28527f707c89e1e47b19de2c33e4db9521a63ad219b739",
+     "provenance": BENJI_OFFICIAL, "expected_owner": "0x4705f33d665762a5371d3b8786e63749814e749295ea73269b379c84b756d83a"},
+    # BENJI on Stellar: a classic issued asset; its "owner" is the issuer account's signer set + thresholds, recorded as
+    # a SHA-256 fingerprint (25/09/2026: master key weight 0, 14 signers, thresholds 2/2/6)
+    {"chain": "stellar", "token": "BENJI", "address": "GBHNGLLIE3KWGKCHIKMHJ5HVZHYIK7WTBE4QF5PLAKL4CJGSEU7HZIW5",
+     "provenance": BENJI_OFFICIAL,
+     "expected_owner": "signers-sha256:04d548a15365ed81974e173dfb4d40e75a520b874f680655e7b296f312431bd5"},
 ]
+STELLAR_HORIZON = "https://horizon.stellar.org"
+STELLAR_PASSPHRASE = "Public Global Stellar Network ; September 2015"
+STELLAR_CONTROL = ("USDC", "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN")
 # Solana control: a Token-2022 mint KNOWN to carry the extensions watched on BUIDL (PYUSD); Aptos control: a fungible
 # asset known to be readable (USDC) and a framework module known to use ed25519 (0x1::account) for the bytecode scan.
 SOLANA_CONTROL = ("PYUSD", "2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo", ("permanentDelegate", "transferHook"))
@@ -261,6 +304,76 @@ def read_aptos(entries, now=None):
         return {"chain": "aptos", "assessed": False, "reason": f"{type(ex).__name__}: {str(ex)[:160]}"}
 
 
+def _stellar_asset(code, issuer):
+    recs = _get_json(f"{STELLAR_HORIZON}/assets?asset_code={code}&asset_issuer={issuer}")["_embedded"]["records"]
+    return recs[0] if len(recs) == 1 else None
+
+
+def _stellar_amount(asset):
+    """Every place an issued Stellar asset can sit, in stroops (7 decimals, exact integer arithmetic)."""
+    def stroops(x):
+        whole, _, frac = str(x).partition(".")
+        return int(whole) * 10 ** 7 + int((frac + "0000000")[:7])
+    b = asset["balances"]
+    parts = [b["authorized"], b["authorized_to_maintain_liabilities"], b["unauthorized"],
+             asset["claimable_balances_amount"], asset["liquidity_pools_amount"], asset["contracts_amount"]]
+    return sum(stroops(x) for x in parts)
+
+
+def stellar_signers_fingerprint(account):
+    """SHA-256 of the issuer account's signer set and thresholds: who can sign for the asset."""
+    body = {"signers": sorted((s["key"], s["weight"]) for s in account.get("signers", [])),
+            "thresholds": account.get("thresholds")}
+    return "signers-sha256:" + hashlib.sha256(json.dumps(body, sort_keys=True).encode()).hexdigest()
+
+
+def read_stellar(entries, now=None):
+    """Stellar (Horizon): the network passphrase must be pubnet, the latest ledger fresh, USDC readable with a
+    non-zero amount. Horizon serves the CURRENT state only: the ledger is recorded before and after the readings."""
+    try:
+        root = _get_json(STELLAR_HORIZON + "/")
+        ts = int(datetime.strptime(root["history_latest_ledger_closed_at"], "%Y-%m-%dT%H:%M:%SZ")
+                 .replace(tzinfo=timezone.utc).timestamp())
+        node = {"chain_id": root["network_passphrase"], "expected_chain_id": STELLAR_PASSPHRASE,
+                "block": root["history_latest_ledger"], "block_timestamp": ts,
+                "block_age_s": int((now if now is not None else time.time()) - ts)}
+        if root["network_passphrase"] != STELLAR_PASSPHRASE:
+            return {"chain": "stellar", "assessed": False, "node": node, "reason": "network passphrase is not pubnet"}
+        if node["block_age_s"] > MAX_BLOCK_AGE_S:
+            return {"chain": "stellar", "assessed": False, "node": node,
+                    "reason": f"stale node: latest ledger is {node['block_age_s']} s old (> {MAX_BLOCK_AGE_S} s)"}
+        label, cissuer = STELLAR_CONTROL
+        ca = _stellar_asset(label, cissuer)
+        ctl = {"token": label, "address": cissuer, "ok": bool(ca) and _stellar_amount(ca) > 0 and "flags" in ca}
+        if not ctl["ok"]:
+            return {"chain": "stellar", "assessed": False, "node": node, "control": ctl,
+                    "reason": "positive control failed: a known asset could not be read on this node"}
+        tokens = []
+        for e in entries:
+            a = _stellar_asset(e["token"], e["address"])
+            acct = _get_json(f"{STELLAR_HORIZON}/accounts/{e['address']}")
+            raw = _stellar_amount(a) if a else None
+            tokens.append({
+                "token": e["token"], "address": e["address"], "provenance": e["provenance"],
+                "name": acct.get("home_domain"), "symbol": a["asset_code"] if a else None, "decimals": 7,
+                "total_supply_raw": str(raw) if raw is not None else None,
+                "total_supply": raw / 10 ** 7 if raw is not None else None,
+                "owner": stellar_signers_fingerprint(acct), "expected_owner": e["expected_owner"],
+                "flags": a["flags"] if a else None, "contract_id": a.get("contract_id") if a else None,
+                "implementation_code_sha256": hashlib.sha256(json.dumps(
+                    {"flags": a["flags"], "contract_id": a.get("contract_id")}, sort_keys=True).encode()).hexdigest() if a else None,
+                "eip712_entry_points": []})
+            if tokens[-1]["symbol"] is None or tokens[-1]["total_supply"] is None:
+                return {"chain": "stellar", "assessed": False, "node": node, "control": ctl,
+                        "reason": f"{e['token']} issued by {e['address']}: asset not readable"}
+        node["block_after"] = _get_json(STELLAR_HORIZON + "/")["history_latest_ledger"]
+        return {"chain": "stellar", "assessed": True, "block": node["block"], "rpc": STELLAR_HORIZON, "node": node,
+                "control": ctl, "tokens": tokens,
+                "discovery": {"status": "not searched (no search source for Stellar)", "unregistered": []}}
+    except Exception as ex:
+        return {"chain": "stellar", "assessed": False, "reason": f"{type(ex).__name__}: {str(ex)[:160]}"}
+
+
 # 4-byte selectors of the EIP-712 family entry points
 SELECTORS = {"DOMAIN_SEPARATOR": "3644e515", "eip712Domain": "84b0196e", "permit": "d505accf",
              "transferWithAuthorization": "e3ee160e"}
@@ -347,6 +460,38 @@ def _abi_uint(h):
     return int(h, 16) if h and h != "0x" else None
 
 
+def _abi_address_array(h):
+    b = bytes.fromhex(h[2:])
+    n = int.from_bytes(b[32:64], "big")
+    return ["0x" + b[64 + 32 * i + 12:64 + 32 * i + 32].hex() for i in range(n)]
+
+
+def _abi_bytes4_array(h):
+    b = bytes.fromhex(h[2:])
+    n = int.from_bytes(b[32:64], "big")
+    return [b[64 + 32 * i:64 + 32 * i + 4].hex() for i in range(n)]
+
+
+def read_diamond(chain, address, block):
+    """EIP-2535 Diamond (JPMorgan's JLTXX is one): functions live in many facets, so the only sound question is the
+    Diamond's own loupe — which selectors are registered, and in which facets. Internal control: name() must map to a
+    facet. Returns None when the contract does not answer the loupe."""
+    fa = eth_call(chain, address, "0x52ef6b2c", block)                # facetAddresses()
+    if not fa or len(fa) < 130:
+        return None
+    facets = _abi_address_array(fa)
+    selectors, codes = set(), []
+    for f in sorted(facets, key=str.lower):
+        r = eth_call(chain, address, "0xadfca15e" + "0" * 24 + f[2:], block)   # facetFunctionSelectors(address)
+        selectors |= set(_abi_bytes4_array(r)) if r else set()
+        codes.append(rpc(chain, "eth_getCode", [f, block]) or "0x")
+    name_facet = eth_call(chain, address, "0xcdffacc6" + "06fdde03" + "0" * 56, block)   # facetAddress(name())
+    return {"facets": len(facets), "selectors_registered": len(selectors),
+            "loupe_control_ok": bool(name_facet) and int(name_facet, 16) != 0,
+            "code_sha256": hashlib.sha256("".join(codes).encode()).hexdigest(),
+            "eip712_entry_points": sorted(k for k, s in SELECTORS.items() if s in selectors)}
+
+
 def read_structure(chain, address, block):
     """Proxy/implementation shape and which EIP-712 entry points the executing code exposes."""
     proxy_code = rpc(chain, "eth_getCode", [address, block]) or "0x"
@@ -359,8 +504,15 @@ def read_structure(chain, address, block):
             if len(c) > 200:
                 impl, impl_code, slot_name = cand, c, name
                 break
-    exposed = sorted(k for k, s in SELECTORS.items() if s in impl_code)
     ds = eth_call(chain, address, "0x" + SELECTORS["DOMAIN_SEPARATOR"], block)
+    if impl is None:
+        dm = read_diamond(chain, address, block)
+        if dm is not None and dm["loupe_control_ok"]:
+            return {"proxy_code_bytes": max(len(proxy_code) // 2 - 1, 0), "implementation": f"diamond:{dm['facets']} facets",
+                    "implementation_slot": "eip2535", "implementation_code_sha256": dm["code_sha256"],
+                    "diamond": {"facets": dm["facets"], "selectors_registered": dm["selectors_registered"]},
+                    "eip712_entry_points": dm["eip712_entry_points"], "domain_separator_answers": bool(ds and len(ds) > 2)}
+    exposed = sorted(k for k, s in SELECTORS.items() if s in impl_code)
     return {
         "proxy_code_bytes": max(len(proxy_code) // 2 - 1, 0),
         "implementation": impl,
@@ -461,9 +613,13 @@ def discover(chain, block, registered):
             out.append(classify_unregistered(chain, a, block))
         except Exception as ex:
             out.append({"address": a, "class": f"unreadable: {type(ex).__name__}"})
-    # kept: owned by the issuer key, or carrying BlackRock's name; tokens sharing only a search term are counted
+    # kept: owned by the issuer key, or carrying BlackRock's name; tokens sharing only a search term are counted.
+    # A token that could not be READ is neither (25/09: six Polygon reads failed in one cycle and silently joined the
+    # "not classified" count while the council said QUIET): listed apart, and the council flags it.
+    unreadable = [u["address"] for u in out if str(u.get("class", "")).startswith("unreadable")]
     kept = [u for u in out if u.get("same_owner") or u.get("carries_blackrock_name")]
-    return {"status": status, "unregistered": kept, "other_matches_not_classified": len(out) - len(kept)}
+    return {"status": status, "unregistered": kept, "unreadable": unreadable,
+            "other_matches_not_classified": len(out) - len(kept) - len(unreadable)}
 
 
 def control_ok(chain, block):
@@ -497,13 +653,13 @@ def read_chain(chain, entries, now=None, discovery=True):
                 return {"chain": chain, "assessed": False, "node": node, "control": ctl,
                         "reason": f"{e['token']} at {e['address']}: symbol or supply not readable"}
             t.update(read_structure(chain, e["address"], block))
-            if t["implementation"] is None and t["proxy_code_bytes"] < 1024:
+            if t["implementation"] is None and t["proxy_code_bytes"] < 1024:   # (a Diamond answers its loupe: not here)
                 # a small proxy whose implementation this reader cannot locate: the EIP-712 scan would read the proxy
                 # itself and report "absent" (NEMESIS 25/09) — not assessed instead of a false clean
                 return {"chain": chain, "assessed": False, "node": node, "control": ctl,
                         "reason": f"{e['token']} at {e['address']}: proxy of {t['proxy_code_bytes']} bytes, implementation not located"}
             t.update({"token": e["token"], "address": e["address"], "provenance": e["provenance"],
-                      "expected_owner": EXPECTED_OWNER})
+                      "expected_owner": e.get("expected_owner", EXPECTED_OWNER)})
             tokens.append(t)
         found = discover(chain, block, [e["address"] for e in entries]) if discovery else {"status": "disabled", "unregistered": []}
         return {"chain": chain, "assessed": True, "block": int(block, 16), "rpc": RPC[chain], "node": node,
@@ -513,26 +669,30 @@ def read_chain(chain, entries, now=None, discovery=True):
 
 
 def fetch_signal(now=None, discovery=True):
-    """Real on-chain readings for every registered chain. `metric` = total BUIDL supply over the ASSESSED chains."""
+    """Real readings for every registered chain. `metric` = total BUIDL supply over the ASSESSED chains (kept as the
+    tuned series); `totals` = the same sum for every watched token, over the chains assessed this run."""
     by_chain = {}
     for e in REGISTRY:
         by_chain.setdefault(e["chain"], []).append(e)
     chains = [read_chain(c, es, now, discovery) for c, es in by_chain.items()]
     chains.append(read_solana([e for e in NONEVM_REGISTRY if e["chain"] == "solana"], now))
     chains.append(read_aptos([e for e in NONEVM_REGISTRY if e["chain"] == "aptos"], now))
-    total = 0.0
+    chains.append(read_stellar([e for e in NONEVM_REGISTRY if e["chain"] == "stellar"], now))
+    totals = {}
     for c in chains:
         for t in c.get("tokens", []):
-            if t["token"] == "BUIDL" and t.get("total_supply") is not None:
-                total += t["total_supply"]
+            if t.get("total_supply") is not None:
+                totals[t["token"]] = totals.get(t["token"], 0.0) + t["total_supply"]
     assessed = [c["chain"] for c in chains if c.get("assessed")]
     return {
-        "metric": round(total, 6),
+        "metric": round(totals.get("BUIDL", 0.0), 6),
         "metric_meaning": "sum of BUIDL total supply over the assessed chains, EVM + Solana + Aptos (not AUM; BUIDL-I excluded)",
+        "totals": {k: round(v, 6) for k, v in sorted(totals.items())},
+        "totals_meaning": "per token, sum of total supply over the chains assessed this run (not AUM, not NAV)",
         "chains_assessed": assessed,
         "chains_not_assessed": [c["chain"] for c in chains if not c.get("assessed")],
         "chains": chains,
-        "source": "public JSON-RPC nodes (publicnode.com), read at the block recorded per chain",
+        "source": "public JSON-RPC nodes (publicnode.com), Solana/Aptos public RPC, Stellar Horizon; block recorded per chain",
     }
 
 

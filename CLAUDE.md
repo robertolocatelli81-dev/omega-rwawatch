@@ -2,9 +2,10 @@
 
 ## What this is
 A separate project applying the OMEGA *method* (positive control + hash-chain audit) to **public on-chain readings of
-BlackRock's BUIDL** on six EVM chains. It **VERIFIES** and records; it does **NOT** forecast, value, or rate the fund.
-Not affiliated with BlackRock or Securitize; not an official NAV/AUM feed. Registry source: BlackRock's official
-token-address page (6 of 7 EVM addresses; BNB tied by shared owner()). GitHub: create/push ONLY after Fable 5 review
+four tokenized funds** — BlackRock BUIDL, J.P. Morgan JLTXX, Franklin Templeton BENJI, Circle USYC — on ten chains (7
+EVM + Solana, Aptos, Stellar). It **VERIFIES** and records; it does **NOT** forecast, value, or rate any fund. Not
+affiliated with any issuer; not an official NAV/AUM feed. Registry source: each issuer's own address page (BUIDL BNB
+is the only exception, tied by shared owner()). GitHub: create/push ONLY after Fable 5 review
 (Roberto's order, 25/09/2026).
 
 ## Hard constraint
@@ -13,7 +14,7 @@ is vendored in `rwawatch.py`. `omega-evidence` is an OPTIONAL dependency (signed
 and says the pack is not written.
 
 ## Layout
-- `rwawatch.py` — JSON-RPC readers, positive control per chain, `REGISTRY` of watched addresses (with provenance),
+- `rwawatch.py` — JSON-RPC, Solana, Aptos and Stellar readers (EIP-2535 Diamond via its loupe), positive control per chain, `REGISTRY` of watched addresses (with provenance),
   vendored SHA-256 hash-chain.
 - `rwawatch_agents.py` — council: coverage, structure (implementation code), signed-authorization entry points, supply move.
 - `rwawatch_orchestrator.py` — one cycle: snapshot → council vs previous → self-tune (rollback-guaranteed) → chain →
@@ -27,7 +28,8 @@ and says the pack is not written.
 - Never edit `*_memory.jsonl` / ledgers in place; append through the code path.
 
 ## Next steps
-1. Solana (Token-2022 mint) and Aptos (Move fungible asset) readers.
+1. (done 25/09) Solana, Aptos, Stellar readers; JLTXX, BENJI, USYC.
 2. Explorer search beyond the first result page; an Avalanche search source.
 3. Changes to on-chain compliance parameters (Aptos `compliance_service`).
 4. Bridge mechanism per chain (burn-and-mint vs lock-and-mint) to rule double counting in or out.
+5. Explorer search for the other funds' names (today BUIDL's only).
