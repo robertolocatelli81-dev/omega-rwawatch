@@ -241,6 +241,11 @@ class TestCouncilNemesis(unittest.TestCase):
         self.assertEqual(v["posture"], "ELEVATED")
         self.assertIn("address", v["rationale"])
 
+    def test_chain_not_assessed_last_time_is_not_a_registry_change(self):
+        prev = _snap({"ethereum": 100}, not_assessed=["polygon"])            # 25/09: a transient timeout on polygon
+        cur = _snap({"ethereum": 100, "polygon": 7.5})
+        self.assertNotIn("not in the previous cycle", " ".join(v["why"] for v in agents.judge(cur, prev)["votes"]))
+
     def test_owner_change_is_flagged(self):
         v = agents.judge(_snap({"ethereum": 100}, owner={"ethereum": "0x" + "ab" * 20}), _snap({"ethereum": 100}))
         self.assertEqual(v["posture"], "ELEVATED")

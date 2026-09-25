@@ -56,7 +56,7 @@ python -m omega_evidence evidence/<pack>.json --ledger evidence/rwawatch_evidenc
 ```bash
 python3 rwawatch.py                 # one snapshot, printed, not saved
 python3 rwawatch_orchestrator.py    # one cycle, appended to the memory (+ signed pack if omega-evidence is installed)
-python3 tests/test_rwawatch.py      # 23 tests, no network, no wall clock; every write sandboxed
+python3 tests/test_rwawatch.py      # 24 tests, no network, no wall clock; every write sandboxed
 ```
 
 ## Measured (25/09/2026)

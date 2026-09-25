@@ -35,11 +35,13 @@ def _agent_structure(snapshot, previous=None):
     if not previous:
         return "QUIET", "no previous snapshot to compare structure with"
     before = {(c, t["token"]): t for c, t in _tokens(previous)}
+    assessed_before = set(previous["signal"].get("chains_assessed", []))
     changes = []
     for c, t in _tokens(snapshot):
         p = before.get((c, t["token"]))
         if p is None:
-            changes.append(f"{c}/{t['token']}: not in the previous cycle")
+            if c in assessed_before:        # a chain not assessed last time has no reading to compare: not a change
+                changes.append(f"{c}/{t['token']}: not in the previous cycle")
             continue
         for k in ("address", "symbol", "decimals"):
             if str(t.get(k)).lower() != str(p.get(k)).lower():
