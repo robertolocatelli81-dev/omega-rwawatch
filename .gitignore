@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+*.jsonl
+*.log
+*.pid
+rwawatch_latest*.json
+evidence/

@@ -1,0 +1,12 @@
+[Unit]
+Description=OMEGA-RWAWatch — one real-data snapshot + council + self-improve cycle
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /home/rupert81vc/progetti/omega-rwawatch/rwawatch_orchestrator.py
+Environment=HOME=/home/rupert81vc
+Environment=PATH=/home/rupert81vc/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PYTHONPATH=/home/rupert81vc/progetti/omega-evidence
+WorkingDirectory=/home/rupert81vc/progetti/omega-rwawatch

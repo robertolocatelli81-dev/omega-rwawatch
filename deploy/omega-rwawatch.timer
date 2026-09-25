@@ -1,0 +1,10 @@
+[Unit]
+Description=OMEGA-RWAWatch — hourly cycle (Persistent: catches up after suspend)
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

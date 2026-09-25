@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "omega-rwawatch"
+version = "0.1.0"
+description = "Hash-chained on-chain readings of BlackRock's BUIDL tokenized fund on six EVM chains, with a positive control per chain"
+readme = "README.md"
+requires-python = ">=3.8"
+authors = [{ name = "Roberto Locatelli" }]
+dependencies = []   # stdlib only
+
+[project.optional-dependencies]
+evidence = ["omega-evidence"]
+
+[project.scripts]
+rwawatch = "rwawatch_orchestrator:run_cycle"
+
+[tool.setuptools]
+py-modules = ["rwawatch", "rwawatch_agents", "rwawatch_orchestrator"]
