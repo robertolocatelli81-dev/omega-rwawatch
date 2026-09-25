@@ -101,6 +101,166 @@ CONTROLS = {
     "bsc": ("Cake-LP", "0x0eD7e52944161450477ee417DE9Cd3a859b14fD0"),
 }
 
+# ───────────────────────── non-EVM chains (same method: network identity, freshness, positive control, readings) ──
+SOLANA_RPC = "https://api.mainnet-beta.solana.com"
+SOLANA_GENESIS = "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d"          # mainnet-beta
+APTOS_API = "https://api.mainnet.aptoslabs.com/v1"
+APTOS_CHAIN_ID = 1                                                        # mainnet
+NONEVM_REGISTRY = [
+    {"chain": "solana", "token": "BUIDL", "address": "GyWgeqpy5GueU2YbkE8xqUeVEokCMMCEeUrfbtMw6phr",
+     "provenance": f"{OFFICIAL}", "expected_owner": "APm3MWbXfMMKAWgsDVnxcAGbLjvRxubPu1A8a5SA2kbJ"},
+    {"chain": "aptos", "token": "BUIDL", "address": "0x50038be55be5b964cfa32cf128b5cf05f123959f286b4cc02b86cafd48945f89",
+     "provenance": f"{OFFICIAL}", "expected_owner": "0x4de5876d8a8e2be7af6af9f3ca94d9e4fafb24b5f4a5848078d8eb08f08e808a"},
+]
+# Solana control: a Token-2022 mint KNOWN to carry the extensions watched on BUIDL (PYUSD); Aptos control: a fungible
+# asset known to be readable (USDC) and a framework module known to use ed25519 (0x1::account) for the bytecode scan.
+SOLANA_CONTROL = ("PYUSD", "2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo", ("permanentDelegate", "transferHook"))
+APTOS_CONTROL = ("USDC", "0xbae207659db88bea0cbead6da0ed00aac12edcdda169e591cd41c94180b46f3b")
+SIG_NEEDLES = ("ed25519", "secp256k1", "multi_ed25519", "bls12381")
+
+
+def _post_json(url, method, params, timeout=25):
+    body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}).encode()
+    for attempt in range(NETWORK_RETRIES + 1):
+        try:
+            req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json", "User-Agent": USER_AGENT})
+            with urllib.request.urlopen(req, context=_CTX, timeout=timeout) as r:
+                out = json.loads(r.read())
+            break
+        except (OSError, ssl.SSLError):
+            if attempt == NETWORK_RETRIES:
+                raise
+            time.sleep(2)
+    if "error" in out:
+        raise RpcError(f"{method}: {out['error'].get('message', out['error'])}")
+    return out.get("result")
+
+
+def _get_json(url, timeout=25):
+    for attempt in range(NETWORK_RETRIES + 1):
+        try:
+            return _http_json(url, timeout)
+        except (OSError, ssl.SSLError):
+            if attempt == NETWORK_RETRIES:
+                raise
+            time.sleep(2)
+
+
+def _sol_mint(address):
+    v = _post_json(SOLANA_RPC, "getAccountInfo", [address, {"encoding": "jsonParsed", "commitment": "finalized"}])
+    val = v["value"]
+    info = val["data"]["parsed"]["info"]
+    ext = {e["extension"]: e.get("state") for e in info.get("extensions", [])}
+    return v["context"]["slot"], val["owner"], info, ext
+
+
+def read_solana(entries, now=None):
+    """Solana: genesis hash must be mainnet-beta, finalized slot fresh, PYUSD must show its Token-2022 extensions."""
+    try:
+        genesis = _post_json(SOLANA_RPC, "getGenesisHash", [])
+        slot = _post_json(SOLANA_RPC, "getSlot", [{"commitment": "finalized"}])
+        bt = _post_json(SOLANA_RPC, "getBlockTime", [slot])
+        node = {"chain_id": genesis, "expected_chain_id": SOLANA_GENESIS, "block": slot, "block_timestamp": bt,
+                "block_age_s": int((now if now is not None else time.time()) - bt)}
+        if genesis != SOLANA_GENESIS:
+            return {"chain": "solana", "assessed": False, "node": node, "reason": f"genesis {genesis} is not mainnet-beta"}
+        if node["block_age_s"] > MAX_BLOCK_AGE_S:
+            return {"chain": "solana", "assessed": False, "node": node,
+                    "reason": f"stale node: finalized slot is {node['block_age_s']} s old (> {MAX_BLOCK_AGE_S} s)"}
+        label, cmint, need = SOLANA_CONTROL
+        _, _, _, cext = _sol_mint(cmint)
+        ctl = {"token": label, "address": cmint, "ok": all(n in cext for n in need), "extensions_seen": sorted(cext)}
+        if not ctl["ok"]:
+            return {"chain": "solana", "assessed": False, "node": node, "control": ctl,
+                    "reason": "positive control failed: the reader could not see Token-2022 extensions where they exist"}
+        tokens = []
+        for e in entries:
+            cslot, program, info, ext = _sol_mint(e["address"])
+            dec, raw = info.get("decimals"), int(info.get("supply")) if info.get("supply") is not None else None
+            md = ext.get("tokenMetadata") or {}
+            tokens.append({
+                "token": e["token"], "address": e["address"], "provenance": e["provenance"],
+                "name": md.get("name"), "symbol": md.get("symbol"), "decimals": dec,
+                "total_supply_raw": str(raw) if raw is not None else None,
+                "total_supply": raw / 10 ** dec if raw is not None and dec is not None else None,
+                "owner": info.get("mintAuthority"), "expected_owner": e["expected_owner"],
+                "program": program, "freeze_authority": info.get("freezeAuthority"),
+                "extensions": sorted(ext),
+                "permanent_delegate": (ext.get("permanentDelegate") or {}).get("delegate"),
+                "transfer_hook_program": (ext.get("transferHook") or {}).get("programId"),
+                "implementation_code_sha256": hashlib.sha256(json.dumps(
+                    {"program": program, "extensions": sorted(ext), "hook": (ext.get("transferHook") or {}).get("programId")},
+                    sort_keys=True).encode()).hexdigest(),
+                "eip712_entry_points": [], "read_at_slot": cslot})
+            if tokens[-1]["symbol"] is None or tokens[-1]["total_supply"] is None:
+                return {"chain": "solana", "assessed": False, "node": node, "control": ctl,
+                        "reason": f"{e['token']} at {e['address']}: symbol or supply not readable"}
+        return {"chain": "solana", "assessed": True, "block": slot, "rpc": SOLANA_RPC, "node": node, "control": ctl,
+                "tokens": tokens, "discovery": {"status": "not searched (no search source for Solana)", "unregistered": []}}
+    except Exception as ex:
+        return {"chain": "solana", "assessed": False, "reason": f"{type(ex).__name__}: {str(ex)[:160]}"}
+
+
+def _apt_resources(address, version):
+    return {r["type"]: r["data"] for r in _get_json(f"{APTOS_API}/accounts/{address}/resources?ledger_version={version}&limit=200")}
+
+
+def read_aptos(entries, now=None):
+    """Aptos: chain_id must be mainnet, ledger fresh; everything read at ONE ledger version. The creator's Move modules
+    are hashed (a change = an upgrade) and scanned for signature-verification primitives; the scan's control is
+    0x1::account, which must be seen using ed25519."""
+    try:
+        li = _get_json(APTOS_API)
+        version = li["ledger_version"]
+        ts = int(li["ledger_timestamp"]) // 1_000_000
+        node = {"chain_id": li["chain_id"], "expected_chain_id": APTOS_CHAIN_ID, "block": int(version),
+                "block_timestamp": ts, "block_age_s": int((now if now is not None else time.time()) - ts)}
+        if li["chain_id"] != APTOS_CHAIN_ID:
+            return {"chain": "aptos", "assessed": False, "node": node, "reason": f"chain id {li['chain_id']} is not mainnet"}
+        if node["block_age_s"] > MAX_BLOCK_AGE_S:
+            return {"chain": "aptos", "assessed": False, "node": node,
+                    "reason": f"stale node: ledger is {node['block_age_s']} s old (> {MAX_BLOCK_AGE_S} s)"}
+        label, casset = APTOS_CONTROL
+        cmeta = _apt_resources(casset, version).get("0x1::fungible_asset::Metadata") or {}
+        acct = _get_json(f"{APTOS_API}/accounts/0x1/module/account?ledger_version={version}")
+        ctl = {"token": label, "address": casset, "metadata_readable": bool(cmeta.get("symbol")),
+               "bytecode_scan_sees_ed25519": "ed25519".encode().hex() in acct.get("bytecode", "")}
+        ctl["ok"] = ctl["metadata_readable"] and ctl["bytecode_scan_sees_ed25519"]
+        if not ctl["ok"]:
+            return {"chain": "aptos", "assessed": False, "node": node, "control": ctl,
+                    "reason": "positive control failed: asset metadata or bytecode scan not working on this node"}
+        tokens = []
+        for e in entries:
+            res = _apt_resources(e["address"], version)
+            md = res.get("0x1::fungible_asset::Metadata") or {}
+            cs = res.get("0x1::fungible_asset::ConcurrentSupply") or {}
+            sp = res.get("0x1::fungible_asset::Supply") or {}
+            raw = (cs.get("current") or {}).get("value") if cs else sp.get("current")
+            raw = int(raw) if raw is not None else None
+            dec = md.get("decimals")
+            owner = (res.get("0x1::object::ObjectCore") or {}).get("owner")
+            mods = _get_json(f"{APTOS_API}/accounts/{owner}/modules?ledger_version={version}&limit=100") if owner else []
+            code = "".join(sorted(m.get("bytecode", "") for m in mods))
+            used = sorted(n for n in SIG_NEEDLES if n.encode().hex() in code)
+            tokens.append({
+                "token": e["token"], "address": e["address"], "provenance": e["provenance"],
+                "name": md.get("name"), "symbol": md.get("symbol"), "decimals": dec,
+                "total_supply_raw": str(raw) if raw is not None else None,
+                "total_supply": raw / 10 ** dec if raw is not None and dec is not None else None,
+                "owner": owner, "expected_owner": e["expected_owner"],
+                "modules": sorted(m["abi"]["name"] for m in mods if m.get("abi")),
+                "implementation_code_sha256": hashlib.sha256(code.encode()).hexdigest() if code else None,
+                "signature_primitives_in_modules": used, "eip712_entry_points": [],
+                "dispatchable_hooks": "0x1::fungible_asset::DispatchFunctionStore" in res})
+            if tokens[-1]["symbol"] is None or tokens[-1]["total_supply"] is None:
+                return {"chain": "aptos", "assessed": False, "node": node, "control": ctl,
+                        "reason": f"{e['token']} at {e['address']}: symbol or supply not readable"}
+        return {"chain": "aptos", "assessed": True, "block": int(version), "rpc": APTOS_API, "node": node, "control": ctl,
+                "tokens": tokens, "discovery": {"status": "not searched (no search source for Aptos)", "unregistered": []}}
+    except Exception as ex:
+        return {"chain": "aptos", "assessed": False, "reason": f"{type(ex).__name__}: {str(ex)[:160]}"}
+
+
 # 4-byte selectors of the EIP-712 family entry points
 SELECTORS = {"DOMAIN_SEPARATOR": "3644e515", "eip712Domain": "84b0196e", "permit": "d505accf",
              "transferWithAuthorization": "e3ee160e"}
@@ -342,7 +502,8 @@ def read_chain(chain, entries, now=None, discovery=True):
                 # itself and report "absent" (NEMESIS 25/09) — not assessed instead of a false clean
                 return {"chain": chain, "assessed": False, "node": node, "control": ctl,
                         "reason": f"{e['token']} at {e['address']}: proxy of {t['proxy_code_bytes']} bytes, implementation not located"}
-            t.update({"token": e["token"], "address": e["address"], "provenance": e["provenance"]})
+            t.update({"token": e["token"], "address": e["address"], "provenance": e["provenance"],
+                      "expected_owner": EXPECTED_OWNER})
             tokens.append(t)
         found = discover(chain, block, [e["address"] for e in entries]) if discovery else {"status": "disabled", "unregistered": []}
         return {"chain": chain, "assessed": True, "block": int(block, 16), "rpc": RPC[chain], "node": node,
@@ -357,6 +518,8 @@ def fetch_signal(now=None, discovery=True):
     for e in REGISTRY:
         by_chain.setdefault(e["chain"], []).append(e)
     chains = [read_chain(c, es, now, discovery) for c, es in by_chain.items()]
+    chains.append(read_solana([e for e in NONEVM_REGISTRY if e["chain"] == "solana"], now))
+    chains.append(read_aptos([e for e in NONEVM_REGISTRY if e["chain"] == "aptos"], now))
     total = 0.0
     for c in chains:
         for t in c.get("tokens", []):
@@ -365,7 +528,7 @@ def fetch_signal(now=None, discovery=True):
     assessed = [c["chain"] for c in chains if c.get("assessed")]
     return {
         "metric": round(total, 6),
-        "metric_meaning": "sum of BUIDL total supply over the assessed EVM chains (not AUM; BUIDL-I excluded)",
+        "metric_meaning": "sum of BUIDL total supply over the assessed chains, EVM + Solana + Aptos (not AUM; BUIDL-I excluded)",
         "chains_assessed": assessed,
         "chains_not_assessed": [c["chain"] for c in chains if not c.get("assessed")],
         "chains": chains,

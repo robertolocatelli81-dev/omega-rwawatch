@@ -83,11 +83,11 @@ def _agent_supply_move(snapshot, previous=None, threshold_pct=2.0):
     return "QUIET", f"BUIDL supply over {sorted(common)} moved {pct:.3f}% (< {threshold_pct}%)"
 
 
-def _agent_owner(snapshot, previous=None, expected_owner="0xe01605f6b6dc593b7d2917f4a0940db2a625b09e"):
-    """owner() of a watched contract is not the issuer key recorded on 25/09/2026 (a transfer of control, or a wrong
-    address in the registry): a human must look."""
+def _agent_owner(snapshot, previous=None):
+    """The controlling key of a watched token (EVM owner(), Solana mint authority, Aptos object owner) is not the one
+    recorded on 25/09/2026 (a transfer of control, or a wrong address in the registry): a human must look."""
     off = [f"{c}/{t['token']}: owner {t.get('owner')}" for c, t in _tokens(snapshot)
-           if t.get("owner") is not None and t.get("owner") != expected_owner]
+           if t.get("expected_owner") and str(t.get("owner")).lower() != str(t.get("expected_owner")).lower()]
     return ("ELEVATED", "; ".join(off)) if off else ("QUIET", "every watched contract is owned by the recorded issuer key")
 
 

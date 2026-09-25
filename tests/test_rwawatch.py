@@ -29,6 +29,7 @@ def _fingerprint(path):
 
 def _token(chain, supply, impl_hash="aa", eps=(), address=None, owner=core.EXPECTED_OWNER):
     return {"token": "BUIDL", "address": address or f"0x{chain[:4].encode().hex():0<40}", "symbol": "BUIDL", "owner": owner,
+            "expected_owner": core.EXPECTED_OWNER,
             "total_supply": supply,
             "total_supply_raw": str(int(round(supply * 10 ** 6))), "decimals": 6,
             "implementation_code_sha256": impl_hash, "eip712_entry_points": list(eps)}
@@ -196,6 +197,79 @@ class TestReader(unittest.TestCase):
         u = core.classify_unregistered("arbitrum", "0x" + "33" * 20, "0x10")
         self.assertTrue(u["same_owner"])
         self.assertIn("new issuer deployment", u["class"])
+
+
+class TestNonEvm(unittest.TestCase):
+    """Solana and Aptos readers, offline: the network identity, freshness and positive control gates."""
+    def setUp(self):
+        self._post, self._get = core._post_json, core._get_json
+
+    def tearDown(self):
+        core._post_json, core._get_json = self._post, self._get
+
+    @staticmethod
+    def _sol(genesis=core.SOLANA_GENESIS, bt=1_000_000, control_ext=("permanentDelegate", "transferHook")):
+        def post(url, method, params, timeout=25):
+            if method == "getGenesisHash":
+                return genesis
+            if method == "getSlot":
+                return 450
+            if method == "getBlockTime":
+                return bt
+            if method == "getAccountInfo":
+                ext = control_ext if params[0] == core.SOLANA_CONTROL[1] else ("permanentDelegate", "transferHook", "tokenMetadata")
+                exts = [{"extension": e, "state": ({"name": "BlackRock USD Institutional Digital Liquidity Fund", "symbol": "BUIDL"}
+                                                   if e == "tokenMetadata" else {"delegate": "D", "programId": "H"})} for e in ext]
+                return {"context": {"slot": 450}, "value": {"owner": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+                        "data": {"parsed": {"info": {"decimals": 6, "supply": "987784165650000", "mintAuthority": "APm3",
+                                                     "freezeAuthority": "APm3", "extensions": exts}}}}}
+            raise AssertionError(method)
+        return post
+
+    def test_solana_reads_and_gates(self):
+        e = [x for x in core.NONEVM_REGISTRY if x["chain"] == "solana"]
+        core._post_json = self._sol()
+        c = core.read_solana(e, now=1_000_010)
+        self.assertTrue(c["assessed"], c)
+        t = c["tokens"][0]
+        self.assertEqual((t["symbol"], t["total_supply"], t["transfer_hook_program"]), ("BUIDL", 987784165.65, "H"))
+        core._post_json = self._sol(genesis="devnet-genesis")
+        self.assertIn("not mainnet-beta", core.read_solana(e, now=1_000_010)["reason"])
+        core._post_json = self._sol(bt=1_000_010 - core.MAX_BLOCK_AGE_S - 1)
+        self.assertIn("stale node", core.read_solana(e, now=1_000_010)["reason"])
+        core._post_json = self._sol(control_ext=())                          # the reader cannot see extensions
+        self.assertIn("positive control failed", core.read_solana(e, now=1_000_010)["reason"])
+
+    @staticmethod
+    def _apt(chain_id=1, ts_s=1_000_000, ed=True):
+        def get(url, timeout=25):
+            if url == core.APTOS_API:
+                return {"chain_id": chain_id, "ledger_version": "7", "ledger_timestamp": str(ts_s * 1_000_000)}
+            if "/module/account" in url:
+                return {"bytecode": "0x" + ("ed25519".encode().hex() if ed else "00")}
+            if "/modules" in url:
+                return [{"abi": {"name": "ds_token"}, "bytecode": "0xabcd"}]
+            if "/resources" in url:
+                return [{"type": "0x1::fungible_asset::Metadata", "data": {"symbol": "BUIDL", "name": "BlackRock BUIDL", "decimals": 6}},
+                        {"type": "0x1::fungible_asset::ConcurrentSupply", "data": {"current": {"value": "161655590490000"}}},
+                        {"type": "0x1::object::ObjectCore", "data": {"owner": "0x4de5"}}]
+            raise AssertionError(url)
+        return get
+
+    def test_aptos_reads_and_gates(self):
+        e = [x for x in core.NONEVM_REGISTRY if x["chain"] == "aptos"]
+        core._get_json = self._apt()
+        c = core.read_aptos(e, now=1_000_005)
+        self.assertTrue(c["assessed"], c)
+        t = c["tokens"][0]
+        self.assertEqual((t["symbol"], t["total_supply"], t["modules"], t["signature_primitives_in_modules"]),
+                         ("BUIDL", 161655590.49, ["ds_token"], []))
+        core._get_json = self._apt(chain_id=2)
+        self.assertIn("not mainnet", core.read_aptos(e, now=1_000_005)["reason"])
+        core._get_json = self._apt(ts_s=1_000_005 - core.MAX_BLOCK_AGE_S - 1)
+        self.assertIn("stale node", core.read_aptos(e, now=1_000_005)["reason"])
+        core._get_json = self._apt(ed=False)                                 # the bytecode scan cannot see ed25519
+        self.assertIn("positive control failed", core.read_aptos(e, now=1_000_005)["reason"])
 
 
 class TestCouncil(unittest.TestCase):
