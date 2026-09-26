@@ -71,13 +71,13 @@ the chain is not assessed.
    sharing only the common word "BUIDL" are counted, not classified; a match that could not be read is listed apart and
    raises `ELEVATED` (it is neither). Each fund is searched by its own terms (BUIDL: `BUIDL`, `BlackRock USD
    Institutional`; JLTXX: `JLTXX`, `JPMorgan OnChain`; BENJI: `Franklin Templeton BENJI`, `Franklin OnChain` — the bare
-   `BENJI` returns a page of unrelated memecoins; USYC: `USYC`) and matched against its issuer's name and the keys recorded for it on any chain.
+   `BENJI` returns a page of unrelated memecoins; USYC: `USYC`) and matched against its issuer's name and the EVM control keys recorded for it (a same-named token found by an EVM explorer can only be owned by an EVM key).
    Where a fund's contracts expose no owner (BENJI on EVM), a same-named token's owner is **not comparable**: said,
    never read as "different". **The search has its own positive control:** for each fund registered on a chain, the
    registered token must be among the results; if it is not, the status says the search is blind for that fund there
    and no finding for it means anything (measured 25/09/2026: BscScan returns nothing for every USYC term, so USYC on
    BNB Chain is not searchable). A fund the search saw last cycle and no longer sees raises `ELEVATED`.
-5. **Council** (deterministic): coverage, address/symbol/decimals/implementation changes per (chain, token), EIP-712
+5. **Council** (deterministic; each chain is compared with the last cycle in which THAT chain was assessed, so a chain that misses a cycle is not dropped from the comparison): coverage, address/symbol/decimals/implementation changes per (chain, token), EIP-712
    entry points appearing or disappearing, owner changes, new unregistered tokens, supply moves per token (the
    threshold is tuned on BUIDL's series and applied to every token) → `QUIET` / `ELEVATED` / `ALERT`.
 6. **Evidence:** with the optional `omega-evidence` package, the cycle is written as a pack signed with Ed25519

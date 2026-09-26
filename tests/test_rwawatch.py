@@ -480,6 +480,27 @@ class TestDiamondStellarMultiToken(unittest.TestCase):
         self.assertEqual(agents._agent_owner(s)[0], "QUIET")
 
 
+class TestBaselineAcrossOutage(unittest.TestCase):
+    """26/09 Gemini Pro review, reproduced: a chain not assessed for ONE cycle dropped out of the comparison, so an
+    upgrade plus a 667x mint during the outage came back QUIET, with the false sentence 'implementation code unchanged'.
+    The council must compare each chain with the last cycle in which THAT chain was assessed."""
+    def test_change_during_an_outage_is_flagged_on_recovery(self):
+        c1 = _snap({"ethereum": 100, "polygon": 7.5}, impl={"polygon": "aa"})
+        c2 = _snap({"ethereum": 100}, not_assessed=["polygon"])
+        c3 = _snap({"ethereum": 100, "polygon": 5007.5}, impl={"polygon": "bb"})
+        base = orch.baseline([{"snapshot": c1}, {"snapshot": c2}])
+        v = agents.judge(c3, base)
+        self.assertEqual(v["posture"], "ELEVATED")
+        why = " ".join(x["why"] for x in v["votes"])
+        self.assertIn("polygon/BUIDL: implementation code changed", why)
+        self.assertIn("polygon", why.split("supply over")[1].split("]")[0])
+
+    def test_baseline_is_the_previous_snapshot_when_nothing_was_missed(self):
+        c1 = _snap({"ethereum": 100, "polygon": 7.5})
+        c2 = _snap({"ethereum": 101, "polygon": 7.5})
+        self.assertEqual(orch.baseline([{"snapshot": c1}, {"snapshot": c2}])["signal"]["chains"], c2["signal"]["chains"])
+
+
 class TestCouncilNemesis(unittest.TestCase):
     """25/09 NEMESIS: a registry edit swapping an address passed QUIET with a false 'code unchanged'."""
     def test_swapped_address_is_flagged(self):
@@ -532,6 +553,25 @@ class TestSelfImprove(unittest.TestCase):
 
 
 class TestCycleSandboxed(unittest.TestCase):
+    def test_run_cycle_uses_the_per_chain_baseline(self):
+        """The same outage, through run_cycle itself (the ablation showed a test on baseline() alone let run_cycle
+        stop using it). Sandboxed like the test above; evidence off."""
+        before = [_fingerprint(p) for p in (orch.MEMORY, orch.LATEST, orch.KEY_PATH, orch.PQ_KEY_PATH)]
+        with tempfile.TemporaryDirectory() as d:
+            saved = (orch.MEMORY, orch.LATEST, orch.EVIDENCE_DIR, orch.KEY_PATH, orch.PQ_KEY_PATH)
+            orch.MEMORY, orch.LATEST = os.path.join(d, "m.jsonl"), os.path.join(d, "latest.json")
+            orch.EVIDENCE_DIR, orch.KEY_PATH = os.path.join(d, "evidence"), os.path.join(d, "key", "seed")
+            orch.PQ_KEY_PATH = os.path.join(d, "key", "mldsa65.key")
+            try:
+                orch.run_cycle(lambda: _snap({"ethereum": 100, "polygon": 7.5}, impl={"polygon": "aa"}), evidence=False)
+                orch.run_cycle(lambda: _snap({"ethereum": 100}, not_assessed=["polygon"]), evidence=False)
+                out = orch.run_cycle(lambda: _snap({"ethereum": 100, "polygon": 5007.5}, impl={"polygon": "bb"}), evidence=False)
+            finally:
+                orch.MEMORY, orch.LATEST, orch.EVIDENCE_DIR, orch.KEY_PATH, orch.PQ_KEY_PATH = saved
+        self.assertEqual(out["verdict"]["posture"], "ELEVATED")
+        self.assertIn("implementation code changed", " ".join(v["why"] for v in out["verdict"]["votes"]))
+        self.assertEqual([_fingerprint(p) for p in (orch.MEMORY, orch.LATEST, orch.KEY_PATH, orch.PQ_KEY_PATH)], before)
+
     def test_cycle_writes_only_in_tmp_and_signs_when_available(self):
         before = [_fingerprint(p) for p in (orch.MEMORY, orch.LATEST, orch.KEY_PATH, orch.PQ_KEY_PATH)]
         with tempfile.TemporaryDirectory() as d:

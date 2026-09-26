@@ -158,10 +158,35 @@ def write_evidence(record):
             "pq_public_key_b64": pq_pub, "signatures": pq_note}
 
 
+def baseline(memory):
+    """What each chain looked like the LAST time it was assessed, merged into one snapshot for the council.
+
+    Comparing with the previous cycle alone let a chain that was not assessed for one cycle drop out of every
+    comparison: an upgrade and a 667x mint during a one-cycle outage came back QUIET (Gemini Pro review, 26/09/2026,
+    reproduced). A chain never assessed keeps its latest unassessed record, so it is still reported as such."""
+    snaps = [r["snapshot"] for r in memory if r.get("snapshot")]
+    if not snaps:
+        return None
+    last_assessed, last_seen = {}, {}
+    for s in snaps:                                   # oldest → newest: later readings overwrite earlier ones
+        for c in s["signal"].get("chains", []):
+            last_seen[c["chain"]] = c
+            if c.get("assessed"):
+                last_assessed[c["chain"]] = c
+    order = [c["chain"] for c in snaps[-1]["signal"].get("chains", [])]
+    order += [n for n in last_seen if n not in order]
+    chains = [last_assessed.get(n, last_seen[n]) for n in order]
+    return {"timestamp_utc": snaps[-1].get("timestamp_utc"), "domain": snaps[-1].get("domain"),
+            "baseline": "per chain, the last cycle in which that chain was assessed",
+            "signal": {"chains": chains,
+                       "chains_assessed": [c["chain"] for c in chains if c.get("assessed")],
+                       "chains_not_assessed": [c["chain"] for c in chains if not c.get("assessed")]}}
+
+
 def run_cycle(snapshot_fn=None, evidence=True):
     memory = load_memory(MEMORY)
     snap = (snapshot_fn or core.snapshot)()
-    previous = next((r["snapshot"] for r in reversed(memory) if r.get("snapshot")), None)
+    previous = baseline(memory)
     threshold, thr_note = improve_threshold(memory + [{"snapshot": snap}])
     verdict = agents.judge(snap, previous, threshold)
     record = {"timestamp_utc": datetime.now(timezone.utc).isoformat(), "snapshot": snap, "verdict": verdict,

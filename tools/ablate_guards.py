@@ -27,6 +27,7 @@ M = [  # (name, file, old, new)
  ("agent: eip712 change", "rwawatch_agents.py", "if (c, a) in before and before[(c, a)] != eps]", "if False]"),
  ("search positive control", "rwawatch.py", 'by_fund[e["token"]] = by_fund.get(e["token"], False) or e["address"].lower() in found', 'by_fund[e["token"]] = True'),
  ("agent: search sight lost", "rwawatch_agents.py", "    if lost:\n        return \"ELEVATED\"", "    if False:\n        return \"ELEVATED\""),
+ ("orchestrator: per-chain baseline", "rwawatch_orchestrator.py", "    previous = baseline(memory)", "    previous = next((r[\"snapshot\"] for r in reversed(memory) if r.get(\"snapshot\")), None)"),
  ("threshold non-regression", "rwawatch_orchestrator.py", "if best_q > -1e9 and (base_q is None or best_q > base_q):", "if best_q > -1e9:"),
 ]
 bad = 0
