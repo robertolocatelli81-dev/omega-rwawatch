@@ -45,8 +45,9 @@ jobs:
           grep -q "^??" /tmp/ablation.log && { echo "a mutation pattern no longer matches the source"; exit 1; } || true
 
   evidence:
-    # the OPTIONAL signed evidence pack: omega-evidence (GitHub tag, not on PyPI) + cryptography for the ML-DSA-65
-    # co-signature. The same suite then exercises the signing path (seed and key created under the temp dir, mode 0600).
+    # the OPTIONAL signed evidence pack: omega-evidence (GitHub, pinned by commit in pyproject — not on PyPI) + cryptography
+    # for the ML-DSA-65 co-signature. The same suite then exercises the signing path with keys the tests create under
+    # their temp dir (mode 0600): no production key and no repository secret is used or needed in CI.
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -56,7 +57,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install the evidence extra (omega-evidence v0.9.1 from GitHub; cryptography >= 48 for ML-DSA-65)
+      - name: Install the evidence extra (omega-evidence from GitHub at the commit of v0.9.1; cryptography >= 48 for ML-DSA-65)
         run: |
           pip install ".[evidence]" "cryptography>=48"
           python -c "import omega_evidence, cryptography; from omega_evidence.pqbackends import mldsa; print('omega_evidence', omega_evidence.__version__ if hasattr(omega_evidence, '__version__') else 'ok', 'cryptography', cryptography.__version__, 'mldsa', mldsa.available())"

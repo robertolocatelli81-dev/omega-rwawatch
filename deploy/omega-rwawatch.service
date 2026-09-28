@@ -5,7 +5,8 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-# %h = the user's home (systemd specifier): the unit assumes a checkout at ~/progetti/omega-rwawatch.
+# USER unit (install under ~/.config/systemd/user/, run with `systemctl --user`): %h = the user's home (systemd
+# specifier); as a SYSTEM unit without User= it would resolve to /root. The unit assumes a checkout at ~/progetti/omega-rwawatch.
 # PYTHONPATH is only needed if omega-evidence is used from a source tree rather than installed (pip install ".[evidence]").
 ExecStart=/usr/bin/python3 %h/progetti/omega-rwawatch/rwawatch_orchestrator.py
 Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin

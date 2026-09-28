@@ -107,11 +107,12 @@ python3 tests/test_rwawatch.py      # 39 tests, no network, no wall clock; every
 mkdir -p /tmp/abl/home && python3 tools/ablate_guards.py /tmp/abl   # 28 scripted mutations of the guards: each must turn the suite red
 ```
 
-The watcher needs nothing beyond the standard library. The signed evidence pack is optional; `omega-evidence` is not on
-PyPI and is installed from its GitHub tag:
+The watcher needs nothing beyond the standard library: Ed25519 and ML-DSA-65 are not in it, so the signed evidence
+pack is optional and comes from `omega-evidence` (not on PyPI; pinned in `pyproject.toml` to the commit of its tag
+v0.9.1) plus `cryptography`:
 
 ```bash
-pip install ".[evidence]" "cryptography>=48"   # omega-evidence v0.9.1 (GitHub) + the ML-DSA-65 backend
+pip install ".[evidence]" "cryptography>=48"   # omega-evidence @ commit of v0.9.1 (GitHub) + the ML-DSA-65 backend
 ```
 
 CI (`.github/workflows/ci.yml`) runs the suite stdlib-only on three Python versions, the guard ablation (every
