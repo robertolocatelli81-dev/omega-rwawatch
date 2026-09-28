@@ -183,6 +183,124 @@ APTOS_CONTROL = ("USDC", "0xbae207659db88bea0cbead6da0ed00aac12edcdda169e591cd41
 SIG_NEEDLES = ("ed25519", "secp256k1", "multi_ed25519", "bls12381")
 
 
+# ───────────────────────── tokenized ETF / equity-tracker layer (added 2026-09-28) ──
+# A DISTINCT asset class from the money-market / treasury FUNDS above: these tokens track a LISTED ETF, as their issuer describes them.
+# Same method — every address is READ on-chain at a block, the control key (owner() on EVM, mint/freeze authority on
+# Solana) is compared to the one recorded for the issuer, and the token's control SURFACE is fingerprinted. `status`
+# is the ISSUER's DECLARED state (listed vs redemption_only), marked declared-with-date, NEVER measured on-chain.
+# Honest scope: total supply is a token count, NOT AUM and NOT the ETF's NAV; this VERIFIES on-chain facts, it does
+# not value anything. Of the seven contracts registered on 2026-09-28, three are redemption-only per their issuer. The
+# OpenSea-listed same-named "QQQX" AAmD… (legacy Token program, no authorities) is not tied to the xStocks keys and is
+# NOT registered (checked by hand 2026-09-28; this layer runs no search).
+#
+# ERC-3643 (T-REX) and ERC-7943 (uRWA, Final since 2026-05-05, fungible variant) permissioned-token entry points: the
+# 4-byte selector is the keccak-256 of the function signature (computed offline 2026-09-28 with a positive control,
+# transfer(address,uint256) = a9059cbb; recomputable — so hardcoding them keeps the runtime stdlib-only). Sources:
+# eips.ethereum.org/EIPS/eip-3643 and the Final text of ERCS/erc-7943.md (ethereum/ERCs). canTransfer(address,address,uint256)
+# has the same selector in both — on the token in uRWA, on the Compliance module in T-REX; forcedTransfer is on the
+# token in both. The pre-Final draft names (isTransferAllowed, isUserAllowed,
+# forceTransfer) were renamed before Final and are NOT searched. Presence on the executing code is
+# a forward-looking signal (issuers adopting on-chain compliance). ABSENCE is asserted only where the scan's positive
+# control passes (the token exposes `permit`, as the three Backed bTokens do); elsewhere (IBITon) it is not assessed.
+PERMISSIONED_SELECTORS = {
+    "erc3643+7943:canTransfer": "e46638e6", "erc3643+7943:forcedTransfer": "9fc1d0e7",
+    "erc3643:compliance": "6290865d", "erc3643:identityRegistry": "134e18f4", "erc3643:isFrozen": "e5839836",
+    "erc3643:setAddressFrozen": "c69c09cf",
+    "erc7943:canSend": "2bc06a92", "erc7943:canReceive": "90d370ba", "erc7943:getFrozenTokens": "158b1a57",
+    "erc7943:setFrozenTokens": "ebe45cba",
+}
+# Positive control of the byte scan itself: EIP-2612 `permit` (d505accf, already in SELECTORS) is exposed by bCSPX. If
+# the scanner cannot see permit where it exists, it cannot be trusted to report the ABSENCE of the 3643/7943 selectors.
+PERMISSIONED_SCAN_CONTROL_SELECTOR = "d505accf"
+
+# Backed key that owns the bToken (ETF) contracts, per chain, measured 2026-09-28 (Base has its own key).
+BACKED_OWNER_ETH = "0x22f2dfe84a2eacfe5d3ca81d26e610cb94eb1603"
+BACKED_OWNER_BASE = "0xd1966bd72695789ec9c245f0bf5a8512b56c1d80"
+# xStocks (Backed's brand for these Token-2022 mints) Solana control authorities, shared across its Token-2022 mints, measured 2026-09-28.
+XSTOCKS_MINTER = "7pt9tkctJPK7PPNQJ77GKg8ZffSF6QxoMiCFYHxrtaCj"
+XSTOCKS_FREEZER = "JDq14BWvqCRFNu1krb12bcRpbGtJZ1FLEakMw6FdxJNs"
+XSTOCKS_TOKEN2022 = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+
+# Ondo Global Markets — IBITon, a tokenized tracker of BlackRock's iShares Bitcoin Trust ETF (IBIT). PRIMARY SOURCE:
+# the issuer's own asset page, whose embedded data lists `supportedNetworks` for IBIT — exactly Ethereum (chainId 1),
+# BSC (56) and Solana (101) with the three addresses registered below (read 2026-09-28; the page is dynamic — each fetch
+# has a different sha256, ~386,753 bytes — so what is reproducible is the supportedNetworks list, not a page hash). The page names the issuer "Ondo Global Markets (BVI) Limited". `status` "listed" is DECLARED: the
+# page lists the token on the three networks and each has a non-zero supply on-chain (measured, not a lifecycle);
+# launch dates are the issuer's / press announcements, not measured here.
+ONDO_PAGE = "https://app.ondo.finance/assets/ibiton"
+ONDO_OFFICIAL = f"listed on {ONDO_PAGE} (issuer's asset page, embedded supportedNetworks list, read 2026-09-28; dynamic page, no stable hash)"
+ONDO_ISSUER = "Ondo Global Markets (BVI) Limited"
+IBITON_UNDERLYING = "iShares Bitcoin Trust ETF (IBIT)"
+IBITON_STATUS_SOURCE = ("listed: the issuer's asset page lists IBITon on Ethereum, BNB Chain and Solana (read 2026-09-28); "
+                        "Ondo Stocks launched on Ethereum 2025-09-03 (The Block) and on Solana 2026-01-21 (ondo.finance/blog)")
+# Sole DEFAULT_ADMIN_ROLE member of the IBITon beacon proxies, per chain (a contract with code; also the beacon's owner()).
+IBITON_ADMIN_ETH = "0x3715b2154d2ff4c5b027c7a1f734b53f27bc34f1"
+IBITON_ADMIN_BSC = "0x8860bbfc7a83e4788a981f4e9f30878331413b26"
+# IBITon Solana mint authority (also the authority of every control extension) and freeze authority, measured 2026-09-28.
+IBITON_SOL_MINTER = "9foMHsSDq7nMg4WPusSz9eY7tyxyukqborA8GyU5cUxD"
+IBITON_SOL_FREEZER = "51QVCuHfL1FeNjd8BDeffCKhCcAYoULnVB3yjNhShiuK"
+
+# EVM ETF tokens. Provenance is recorded per entry: the Backed bToken addresses come from the issuer's product pages
+# (explorer links under 'Smart Contracts'), also carried by explorer labels; the two on Ethereum share one owner(), the
+# Base one has another key. Each is verified at the block recorded in the run. Backed's product pages say bTokens are no longer available for new issuance (redemption supported).
+ETF_REGISTRY_EVM = [
+    {"chain": "ethereum", "token": "bCSPX", "address": "0x1e2c4fb7ede391d116e6b41cd0608260e8801d59",
+     "underlying": "iShares Core S&P 500 UCITS ETF (CSPX, IE00B5BMR087)", "issuer": "Backed Assets (JE) Limited",
+     "expected_owner": BACKED_OWNER_ETH, "status": "redemption_only",
+     "status_source": "issuer product page (read 2026-09-28): 'no longer available for new issuance', redemption supported; no date given there",
+     "provenance": "issuer product page assets.backed.fi/products/bcspx (explorer links under 'Smart Contracts', raw HTML "
+                   "read 2026-09-28); also the Etherscan label 'Backed Finance: bCSPX Token'; on-chain name/symbol/owner verified "
+                   "2026-09-28, owner() = the key that also owns bIB01"},
+    {"chain": "base", "token": "bCSPX", "address": "0xc3ce78b037dda1b966d31ec7979d3f3a38571a8e",
+     "underlying": "iShares Core S&P 500 UCITS ETF (CSPX, IE00B5BMR087)", "issuer": "Backed Assets (JE) Limited",
+     "expected_owner": BACKED_OWNER_BASE, "status": "redemption_only",
+     "status_source": "issuer product page (read 2026-09-28): 'no longer available for new issuance', redemption supported; no date given there",
+     "provenance": "issuer product page assets.backed.fi/products/bcspx (Base explorer link, raw HTML read 2026-09-28); "
+                   "also BaseScan; on-chain name/symbol/owner verified 2026-09-28 (Base owner differs from Ethereum)"},
+    {"chain": "ethereum", "token": "bIB01", "address": "0xca30c93b02514f86d5c86a6e375e3a330b435fb5",
+     "underlying": "iShares $ Treasury Bond 0-1yr UCITS ETF", "issuer": "Backed Assets (JE) Limited",
+     "expected_owner": BACKED_OWNER_ETH, "status": "redemption_only",
+     "status_source": "issuer product page (read 2026-09-28): 'no longer available for new issuance', redemption supported; no date given there",
+     "provenance": "issuer product page assets.backed.fi/products/bib01 (explorer links, raw HTML read 2026-09-28); also "
+                   "the Etherscan label 'Backed Finance: bIB01 Token'; on-chain name/symbol/owner verified 2026-09-28, owner() = the key that also owns bCSPX"},
+] + [
+    # IBITon (Ondo Global Markets): EIP-1967 BEACON proxies of 824 bytes; owner() REVERTS. Control key MEASURED
+    # 28/09/2026: AccessControl DEFAULT_ADMIN_ROLE has exactly ONE member (getRoleMemberCount = 1, hasRole confirmed),
+    # a contract on each chain that is also the beacon's owner(). compliance() is present and answers with a contract
+    # address (1,403 bytes; its owner() is a key other than IBITon's admin — the relation to the issuer is not
+    # established on-chain). identityRegistry(), isFrozen() and canTransfer() revert when called (measured 28/09/2026).
+    {"chain": ch, "token": "IBITon", "address": a, "underlying": IBITON_UNDERLYING, "issuer": ONDO_ISSUER,
+     "expected_owner": adm, "expected_owner_kind": "AccessControl DEFAULT_ADMIN_ROLE (sole member, measured 2026-09-28)",
+     "status": "listed", "status_source": IBITON_STATUS_SOURCE,
+     "provenance": f"{ONDO_OFFICIAL}; on-chain name/symbol/beacon/admin role verified 2026-09-28"}
+    for ch, a, adm in (("ethereum", "0x122940c4c5f9ccfae7fa86455a42d3ec140855ce", IBITON_ADMIN_ETH),
+                       ("bsc", "0x68b07cef227cea1b2b6683921c8c825cd5c69ec7", IBITON_ADMIN_BSC))
+]
+# Solana ETF tokens (xStocks and Ondo, Token-2022). Control key = mint authority; the permissioned surface is the set of
+# Token-2022 extensions (permanentDelegate / defaultAccountState / pausable / transferHook / confidentialTransfer).
+ETF_REGISTRY_SOLANA = [
+    {"chain": "solana", "token": "SPYx", "address": "XsoCS1TfEyfFhfvj8EtZ528L3CaKBDBRqRapnBbDF2W",
+     "underlying": "SPDR S&P 500 ETF Trust (SPY)", "issuer": "Backed Assets (JE) Limited (xStocks brand)",
+     "expected_mint_authority": XSTOCKS_MINTER, "expected_freeze_authority": XSTOCKS_FREEZER,
+     "status": "listed", "status_source": "listed in the xStocks product catalog (read 2026-09-28); lifecycle not stated there, not measured on-chain",
+     "provenance": "issuer catalog xstocks.com/products (embedded JSON, symbol SPYx -> solana mint, raw HTML read 2026-09-28); "
+                   "underlying per assets.backed.fi/products/sp500-xstock ('SPYx tracks the price of SPDR S&P 500 ETF Trust'); "
+                   "also Solana Compass. Tied on-chain: "
+                   "Token-2022, mint/freeze authority identical to xStocks NVDAx (Xsc9qv…), verified 2026-09-28"},
+    # IBITon on Solana: Token-2022 mint (vanity '…Kondo') listed by the issuer's page; mint / freeze authority and the
+    # control extensions (confidentialTransferMint, defaultAccountState, pausableConfig, transferHook with no hook
+    # program set) measured 28/09/2026
+    {"chain": "solana", "token": "IBITon", "address": "6JLG8iUkAuqiBhL3j2ckDMDf5oWAa6awmyaWezKondo",
+     "underlying": IBITON_UNDERLYING, "issuer": ONDO_ISSUER,
+     "expected_mint_authority": IBITON_SOL_MINTER, "expected_freeze_authority": IBITON_SOL_FREEZER,
+     "status": "listed", "status_source": IBITON_STATUS_SOURCE,
+     "provenance": f"{ONDO_OFFICIAL}; Token-2022 mint, metadata name/symbol and authorities verified 2026-09-28"},
+]
+# The Token-2022 extensions that constitute issuer CONTROL over holders (as opposed to plain metadata).
+SOLANA_CONTROL_EXTENSIONS = ("permanentDelegate", "defaultAccountState", "pausableConfig", "transferHook",
+                             "confidentialTransferMint")
+
+
 def _post_json(url, method, params, timeout=25):
     body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}).encode()
     for attempt in range(NETWORK_RETRIES + 1):
@@ -218,25 +336,36 @@ def _sol_mint(address):
     return v["context"]["slot"], val["owner"], info, ext
 
 
+def solana_node_gate(now=None):
+    """Genesis hash (mainnet-beta), freshness of the finalized slot and the PYUSD Token-2022 positive control — the
+    gate SHARED by the fund layer (read_solana) and the ETF layer (fetch_etf_signal), written and tested once.
+    Returns {"ok": True, "node", "slot", "ctl"} when the chain may be read, else a NOT-ASSESSED dict."""
+    genesis = _post_json(SOLANA_RPC, "getGenesisHash", [])
+    slot = _post_json(SOLANA_RPC, "getSlot", [{"commitment": "finalized"}])
+    bt = _post_json(SOLANA_RPC, "getBlockTime", [slot])
+    node = {"chain_id": genesis, "expected_chain_id": SOLANA_GENESIS, "block": slot, "block_timestamp": bt,
+            "block_age_s": int((now if now is not None else time.time()) - bt)}
+    if genesis != SOLANA_GENESIS:
+        return {"chain": "solana", "assessed": False, "node": node, "reason": f"genesis {genesis} is not mainnet-beta"}
+    if node["block_age_s"] > MAX_BLOCK_AGE_S:
+        return {"chain": "solana", "assessed": False, "node": node,
+                "reason": f"stale node: finalized slot is {node['block_age_s']} s old (> {MAX_BLOCK_AGE_S} s)"}
+    label, cmint, need = SOLANA_CONTROL
+    _, _, _, cext = _sol_mint(cmint)
+    ctl = {"token": label, "address": cmint, "ok": all(n in cext for n in need), "extensions_seen": sorted(cext)}
+    if not ctl["ok"]:
+        return {"chain": "solana", "assessed": False, "node": node, "control": ctl,
+                "reason": "positive control failed: the reader could not see Token-2022 extensions where they exist"}
+    return {"ok": True, "node": node, "slot": slot, "ctl": ctl}
+
+
 def read_solana(entries, now=None):
     """Solana: genesis hash must be mainnet-beta, finalized slot fresh, PYUSD must show its Token-2022 extensions."""
     try:
-        genesis = _post_json(SOLANA_RPC, "getGenesisHash", [])
-        slot = _post_json(SOLANA_RPC, "getSlot", [{"commitment": "finalized"}])
-        bt = _post_json(SOLANA_RPC, "getBlockTime", [slot])
-        node = {"chain_id": genesis, "expected_chain_id": SOLANA_GENESIS, "block": slot, "block_timestamp": bt,
-                "block_age_s": int((now if now is not None else time.time()) - bt)}
-        if genesis != SOLANA_GENESIS:
-            return {"chain": "solana", "assessed": False, "node": node, "reason": f"genesis {genesis} is not mainnet-beta"}
-        if node["block_age_s"] > MAX_BLOCK_AGE_S:
-            return {"chain": "solana", "assessed": False, "node": node,
-                    "reason": f"stale node: finalized slot is {node['block_age_s']} s old (> {MAX_BLOCK_AGE_S} s)"}
-        label, cmint, need = SOLANA_CONTROL
-        _, _, _, cext = _sol_mint(cmint)
-        ctl = {"token": label, "address": cmint, "ok": all(n in cext for n in need), "extensions_seen": sorted(cext)}
-        if not ctl["ok"]:
-            return {"chain": "solana", "assessed": False, "node": node, "control": ctl,
-                    "reason": "positive control failed: the reader could not see Token-2022 extensions where they exist"}
+        g = solana_node_gate(now)
+        if not g.get("ok"):
+            return g
+        node, slot, ctl = g["node"], g["slot"], g["ctl"]
         tokens = []
         for e in entries:
             cslot, program, info, ext = _sol_mint(e["address"])
@@ -403,6 +532,15 @@ PROXY_SLOTS = {  # where proxies keep their implementation address
     "zeppelinos": "0x7050c9e0f4ca769c69bd3a8ef740bc37934f8e2c036e5a723fd8ee048ed3f8c3",
     "slot1": "0x1",
 }
+# EIP-1967 BEACON proxies (OpenZeppelin BeaconProxy; the Ondo Stocks tokens are such, measured 28/09/2026): the proxy
+# stores the BEACON's address, and the executing code is whatever the beacon's implementation() returns. Tried AFTER
+# the direct slots above, so every contract resolved by them keeps its fingerprint unchanged (negative control).
+BEACON_SLOT = "0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50"
+BEACON_IMPL_SELECTOR = "0x5c60da1b"                                       # implementation()
+# OpenZeppelin AccessControl (+ the enumerable extension): the control key of a token whose owner() reverts is the
+# holder of DEFAULT_ADMIN_ROLE (0x00…00), and only when the contract ENUMERATES it and CONFIRMS it with hasRole.
+DEFAULT_ADMIN_ROLE = "0" * 64
+ACCESS_CONTROL_SELECTORS = {"hasRole": "91d14854", "getRoleMemberCount": "ca15c873", "getRoleMember": "9010d07c"}
 
 
 # ───────────────────────── vendored hash-chain (OMEGA-style, independent) ──
@@ -513,18 +651,36 @@ def read_diamond(chain, address, block):
             "eip712_entry_points": sorted(k for k, s in SELECTORS.items() if s in selectors)}
 
 
-def read_structure(chain, address, block):
-    """Proxy/implementation shape and which EIP-712 entry points the executing code exposes."""
+def locate_implementation(chain, address, block):
+    """Where the EXECUTING code of `address` lives — the ONE resolver used by read_structure and read_permissioned.
+    The direct proxy slots are tried first, in PROXY_SLOTS order; only when none holds a contract is the EIP-1967
+    beacon slot read and the beacon asked for implementation(). A beacon whose implementation() reverts, answers
+    nothing, or points to an address without code leaves the implementation UNLOCATED (the callers then report NOT
+    ASSESSED, never a clean read of the proxy's own bytes). Without a proxy the executing code is the address's own."""
     proxy_code = rpc(chain, "eth_getCode", [address, block]) or "0x"
-    impl, impl_code, slot_name = None, proxy_code, None
     for name, slot in PROXY_SLOTS.items():
         v = rpc(chain, "eth_getStorageAt", [address, slot, block])
         if v and int(v, 16):
             cand = "0x" + v[-40:]
             c = rpc(chain, "eth_getCode", [cand, block]) or "0x"
             if len(c) > 200:
-                impl, impl_code, slot_name = cand, c, name
-                break
+                return {"implementation": cand, "code": c, "slot": name, "beacon": None, "proxy_code": proxy_code}
+    bv = rpc(chain, "eth_getStorageAt", [address, BEACON_SLOT, block])
+    if bv and int(bv, 16):
+        beacon = "0x" + bv[-40:]
+        r = eth_call(chain, beacon, BEACON_IMPL_SELECTOR, block)          # None = reverted: no implementation
+        if r and len(r) >= 66 and int(r, 16):
+            cand = "0x" + r[-40:]
+            c = rpc(chain, "eth_getCode", [cand, block]) or "0x"
+            if len(c) > 200:
+                return {"implementation": cand, "code": c, "slot": "beacon", "beacon": beacon, "proxy_code": proxy_code}
+    return {"implementation": None, "code": proxy_code, "slot": None, "beacon": None, "proxy_code": proxy_code}
+
+
+def read_structure(chain, address, block):
+    """Proxy/implementation shape and which EIP-712 entry points the executing code exposes."""
+    loc = locate_implementation(chain, address, block)
+    proxy_code, impl, impl_code, slot_name = loc["proxy_code"], loc["implementation"], loc["code"], loc["slot"]
     ds = eth_call(chain, address, "0x" + SELECTORS["DOMAIN_SEPARATOR"], block)
     if impl is None:
         dm = read_diamond(chain, address, block)
@@ -534,7 +690,7 @@ def read_structure(chain, address, block):
                     "diamond": {"facets": dm["facets"], "selectors_registered": dm["selectors_registered"]},
                     "eip712_entry_points": dm["eip712_entry_points"], "domain_separator_answers": bool(ds and len(ds) > 2)}
     exposed = sorted(k for k, s in SELECTORS.items() if s in impl_code)
-    return {
+    out = {
         "proxy_code_bytes": max(len(proxy_code) // 2 - 1, 0),
         "implementation": impl,
         "implementation_slot": slot_name,
@@ -542,11 +698,36 @@ def read_structure(chain, address, block):
         "eip712_entry_points": exposed,
         "domain_separator_answers": bool(ds and len(ds) > 2),
     }
+    if loc["beacon"]:                      # only a beacon proxy carries this key: the other records stay as they were
+        out["beacon"] = loc["beacon"]
+    return out
 
 
 def read_owner(chain, address, block):
     o = eth_call(chain, address, "0x8da5cb5b", block)
     return ("0x" + o[-40:]).lower() if o and len(o) >= 66 else None
+
+
+def read_access_control_admin(chain, address, block, cap=8):
+    """The holders of AccessControl's DEFAULT_ADMIN_ROLE, when the contract exposes the ENUMERABLE extension:
+    getRoleMemberCount(0x00), then each getRoleMember(0x00, i) CONFIRMED by hasRole(0x00, member). None when the
+    contract does not enumerate the role or denies a member it enumerated — then the key is not comparable, said,
+    never inferred. `cap` bounds the enumeration (a count beyond it is still recorded)."""
+    z = DEFAULT_ADMIN_ROLE
+    n = _abi_uint(eth_call(chain, address, "0x" + ACCESS_CONTROL_SELECTORS["getRoleMemberCount"] + z, block))
+    if n is None:
+        return None
+    members = []
+    for i in range(min(n, cap)):
+        m = eth_call(chain, address, "0x" + ACCESS_CONTROL_SELECTORS["getRoleMember"] + z + hex(i)[2:].rjust(64, "0"), block)
+        if not m or len(m) < 66:
+            return None
+        member = ("0x" + m[-40:]).lower()
+        h = eth_call(chain, address, "0x" + ACCESS_CONTROL_SELECTORS["hasRole"] + z + "0" * 24 + member[2:], block)
+        if not h or int(h, 16) != 1:
+            return None
+        members.append(member)
+    return {"count": n, "members": members}
 
 
 def read_token(chain, address, block):
@@ -603,6 +784,163 @@ def search_same_named(chain):
     status = (f"searched {kind}, first result page per term, {len(FUND_SEARCH)} funds"
               + (f" (errors: {'; '.join(errors)})" if errors else ""))
     return status, dict(sorted(found.items(), key=lambda kv: kv[0].lower()))
+
+
+def read_permissioned(chain, address, block):
+    """Which ERC-3643 / ERC-7943 permissioned entry points the EXECUTING code exposes, with a positive control that
+    the byte scan works (it must see EIP-2612 `permit` where a permit-token exposes it). `scan_control_permit_visible`
+    False means the scan cannot be trusted to report absence. Only a structural fingerprint — it never reads WHO is in
+    an identity registry (that would breach the boundary)."""
+    impl_code = locate_implementation(chain, address, block)["code"]     # the same resolver as read_structure
+    seen = sorted(k for k, sel in PERMISSIONED_SELECTORS.items() if sel in impl_code)
+    answers = {"identity_registry_answers": None, "compliance_answers": None}
+    # confirm a match ANSWERS with an address, not just a byte coincidence (28/09: IBITon carries `compliance()` alone
+    # with a contract address; that target's bytecode has no PUSH4 of ICompliance canTransfer, bindToken or isTokenBound,
+    # and whose module it is is not established on-chain)
+    for key, sel in (("identity_registry_answers", "erc3643:identityRegistry"), ("compliance_answers", "erc3643:compliance")):
+        if sel in seen:
+            r = eth_call(chain, address, "0x" + PERMISSIONED_SELECTORS[sel], block)
+            answers[key] = bool(r and len(r) >= 66 and int(r, 16) != 0)
+    return {"permissioned_interfaces": seen,
+            "scan_control_permit_visible": PERMISSIONED_SCAN_CONTROL_SELECTOR in impl_code, **answers}
+
+
+def read_etf_evm(chain, block, entries):
+    """Each EVM ETF token at a block: supply, control key vs the issuer's recorded key, structure, permissioned
+    fingerprint. A token whose symbol or supply cannot be read is reported (readable False), never dropped."""
+    out = []
+    for e in entries:
+        t = read_token(chain, e["address"], block)
+        # the CONTROL KEY: owner() when it answers; else the sole holder of AccessControl's DEFAULT_ADMIN_ROLE when
+        # the contract enumerates and confirms it (IBITon, 28/09/2026); else None = not comparable, said, not faked
+        key, kind, admin = t["owner"], ("owner()" if t["owner"] else None), None
+        if key is None:
+            admin = read_access_control_admin(chain, e["address"], block)
+            if admin and len(admin["members"]) == 1:
+                key, kind = admin["members"][0], "AccessControl DEFAULT_ADMIN_ROLE (sole member, hasRole confirmed)"
+            elif admin and admin["members"]:
+                kind = f"AccessControl DEFAULT_ADMIN_ROLE ({admin['count']} members: not a single key)"
+        expected = e.get("expected_owner")
+        rec = {"token": e["token"], "address": e["address"], "underlying": e["underlying"], "issuer": e["issuer"],
+               "status_declared": e["status"], "status_source": e["status_source"], "provenance": e["provenance"],
+               "symbol": t["symbol"], "decimals": t["decimals"], "total_supply_raw": t["total_supply_raw"],
+               "total_supply": t["total_supply"], "owner": t["owner"], "control_key": key, "control_key_kind": kind,
+               "expected_owner": expected, "expected_owner_kind": e.get("expected_owner_kind", "owner()" if expected else None),
+               "same_owner": (key.lower() == expected.lower()) if key and expected else None}
+        if admin is not None:
+            rec["admin_role_members"] = admin
+        if t["symbol"] is None or t["total_supply"] is None:
+            rec["readable"] = False
+        else:
+            rec["readable"] = True
+            s = read_structure(chain, e["address"], block)
+            rec["implementation"] = s["implementation"]
+            rec["implementation_slot"] = s["implementation_slot"]
+            rec["implementation_code_sha256"] = s["implementation_code_sha256"]
+            if s.get("beacon"):
+                rec["beacon"] = s["beacon"]
+            rec["eip712_entry_points"] = s["eip712_entry_points"]
+            rec["permissioned"] = read_permissioned(chain, e["address"], block)
+            if s["implementation"] is None and s["proxy_code_bytes"] < 1024:
+                # the same guard as the fund layer: a small proxy whose implementation is not located is NOT ASSESSED
+                rec["readable"] = False
+                rec["reason"] = f"proxy of {s['proxy_code_bytes']} bytes, implementation not located"
+        out.append(rec)
+    return out
+
+
+def scaled_ui_multiplier(ext, now):
+    """Token-2022 scaledUiAmountConfig: the multiplier holders' balances are DISPLAYED with (splits, reinvested
+    dividends). The effective one is newMultiplier once `now` >= newMultiplierEffectiveTimestamp, else multiplier.
+    Returns (multiplier, which) or (None, None) when the mint has no such extension. `now` is injected (no wall clock
+    in tests)."""
+    cfg = ext.get("scaledUiAmountConfig")
+    if not cfg:
+        return None, None
+    ts = cfg.get("newMultiplierEffectiveTimestamp")
+    if ts is not None and cfg.get("newMultiplier") is not None and now >= int(ts):
+        return float(cfg["newMultiplier"]), "newMultiplier"
+    return float(cfg["multiplier"]), "multiplier"
+
+
+def read_etf_solana(entries, now=None):
+    """Each Token-2022 ETF mint (xStocks, Ondo): supply, mint/freeze authority vs the recorded issuer keys, and the set of
+    Token-2022 CONTROL extensions (the permissioned surface on Solana). `total_supply` is the RAW token amount
+    (supply / 10**decimals); where the mint carries scaledUiAmountConfig the amount holders SEE is that times the
+    effective multiplier, recorded apart as `ui_amount` (28/09: SPYx 1.0057…, IBITon 1)."""
+    now = now if now is not None else time.time()
+    out = []
+    for e in entries:
+        try:
+            slot, program, info, ext = _sol_mint(e["address"])
+            dec = info.get("decimals")
+            raw = int(info["supply"]) if info.get("supply") is not None else None
+            mult, which = scaled_ui_multiplier(ext, now)
+            amount = (raw / 10 ** dec) if raw is not None and dec is not None else None
+            out.append({
+                "ui_multiplier": mult, "ui_multiplier_field": which,
+                "ui_amount": (amount * mult) if amount is not None and mult is not None else None,
+                "token": e["token"], "address": e["address"], "underlying": e["underlying"], "issuer": e["issuer"],
+                "status_declared": e["status"], "status_source": e["status_source"], "provenance": e["provenance"],
+                "readable": True, "slot": slot, "program": program, "decimals": dec,
+                "total_supply_raw": str(raw) if raw is not None else None,
+                "total_supply": (raw / 10 ** dec) if raw is not None and dec is not None else None,
+                "mint_authority": info.get("mintAuthority"), "freeze_authority": info.get("freezeAuthority"),
+                "expected_mint_authority": e["expected_mint_authority"],
+                "same_mint_authority": info.get("mintAuthority") == e["expected_mint_authority"],
+                "same_freeze_authority": info.get("freezeAuthority") == e["expected_freeze_authority"],
+                "token2022": program == XSTOCKS_TOKEN2022,
+                "transfer_hook_program": (ext.get("transferHook") or {}).get("programId"),
+                "permissioned_controls": sorted(k for k in ext if k in SOLANA_CONTROL_EXTENSIONS)})
+        except Exception as ex:
+            out.append({"token": e["token"], "address": e["address"], "readable": False,
+                        "reason": f"{type(ex).__name__}: {str(ex)[:160]}"})
+    return out
+
+
+def fetch_etf_signal(now=None):
+    """Tokenized-ETF layer: per EVM chain, node identity + positive control (reused from the fund layer), then each
+    ETF token read at the block; then the Solana (Token-2022) mints. Additive — it NEVER touches the BUIDL metric."""
+    by_chain = {}
+    for e in ETF_REGISTRY_EVM:
+        by_chain.setdefault(e["chain"], []).append(e)
+    chains = []
+    for chain, entries in by_chain.items():
+        try:
+            g = evm_node_gate(chain, now)                          # same gate as the fund layer
+            if not g.get("ok"):
+                chains.append(g)
+                continue
+            block, ctl = g["block"], g["ctl"]
+            chains.append({"chain": chain, "assessed": True, "block": int(block, 16), "control": ctl,
+                           "tokens": read_etf_evm(chain, block, entries)})
+        except Exception as ex:
+            chains.append({"chain": chain, "assessed": False, "reason": f"{type(ex).__name__}: {str(ex)[:160]}"})
+    try:                                                           # Solana: the same gate as the fund layer, first
+        gate = solana_node_gate(now)
+        if not gate.get("ok"):
+            chains.append(gate)
+        else:
+            sol = read_etf_solana(ETF_REGISTRY_SOLANA, now)
+            chains.append({"chain": "solana", "assessed": bool(sol) and all(t.get("readable") for t in sol),
+                           "block": gate["slot"], "node": gate["node"], "control": gate["ctl"], "tokens": sol})
+    except Exception as ex:
+        chains.append({"chain": "solana", "assessed": False, "reason": f"{type(ex).__name__}: {str(ex)[:160]}"})
+    totals = {}
+    for c in chains:
+        for t in c.get("tokens", []):
+            if t.get("total_supply") is not None:
+                totals[t["token"]] = totals.get(t["token"], 0.0) + t["total_supply"]
+    return {
+        "asset_class": "tokenized ETF / equity tracker (tracks a listed ETF, per its issuer)",
+        "totals": {k: round(v, 6) for k, v in sorted(totals.items())},
+        "totals_meaning": "per token, sum of on-chain total supply over the chains assessed this run (a token count, NOT AUM and NOT the ETF's NAV)",
+        "chains_assessed": [c["chain"] for c in chains if c.get("assessed")],
+        "chains_not_assessed": [c["chain"] for c in chains if not c.get("assessed")],
+        "chains": chains,
+        "note": "issuer state (listed vs redemption_only) is DECLARED by the issuer with date, not measured on-chain; "
+                "ERC-3643/7943 selector absence is asserted only where scan_control_permit_visible is true; elsewhere it is not assessed",
+    }
 
 
 def _fund_owners(fund):
@@ -680,22 +1018,33 @@ def control_ok(chain, block):
     return {"token": label, "address": addr, "ok": ok, "eip712_entry_points": s["eip712_entry_points"]}
 
 
+def evm_node_gate(chain, now=None):
+    """Node identity, freshness and the EIP-712 positive control for one EVM chain — the gate SHARED by the fund
+    layer (read_chain) and the ETF layer (fetch_etf_signal), so the guard is written and mutation-tested once.
+    Returns {"ok": True, "node", "block", "ctl"} when the chain may be read, else a NOT-ASSESSED dict."""
+    node = node_identity(chain, now)
+    if node["chain_id"] != node["expected_chain_id"]:
+        return {"chain": chain, "assessed": False, "node": node,
+                "reason": f"the URL serves chain id {node['chain_id']}, not {node['expected_chain_id']}"}
+    if node["block_age_s"] > MAX_BLOCK_AGE_S:
+        return {"chain": chain, "assessed": False, "node": node,
+                "reason": f"stale node: latest block is {node['block_age_s']} s old (> {MAX_BLOCK_AGE_S} s)"}
+    block = node["block"]
+    ctl = control_ok(chain, block)
+    if not ctl["ok"]:
+        return {"chain": chain, "assessed": False, "block": int(block, 16), "control": ctl,
+                "reason": "positive control failed: the reader could not see EIP-712 where it exists"}
+    return {"ok": True, "node": node, "block": block, "ctl": ctl}
+
+
 def read_chain(chain, entries, now=None, discovery=True):
     """One chain: node identity (chain id, block age), positive control, then every registered token and, if
     enabled, same-named unregistered tokens. Any failure of the node checks makes the chain NOT ASSESSED."""
     try:
-        node = node_identity(chain, now)
-        if node["chain_id"] != node["expected_chain_id"]:
-            return {"chain": chain, "assessed": False, "node": node,
-                    "reason": f"the URL serves chain id {node['chain_id']}, not {node['expected_chain_id']}"}
-        if node["block_age_s"] > MAX_BLOCK_AGE_S:
-            return {"chain": chain, "assessed": False, "node": node,
-                    "reason": f"stale node: latest block is {node['block_age_s']} s old (> {MAX_BLOCK_AGE_S} s)"}
-        block = node["block"]
-        ctl = control_ok(chain, block)
-        if not ctl["ok"]:
-            return {"chain": chain, "assessed": False, "block": int(block, 16), "control": ctl,
-                    "reason": "positive control failed: the reader could not see EIP-712 where it exists"}
+        g = evm_node_gate(chain, now)
+        if not g.get("ok"):
+            return g
+        node, block, ctl = g["node"], g["block"], g["ctl"]
         tokens = []
         for e in entries:
             t = read_token(chain, e["address"], block)
@@ -748,7 +1097,8 @@ def fetch_signal(now=None, discovery=True):
 
 def snapshot():
     """One observation: real signal + UTC timestamp, ready to be chained."""
-    return {"timestamp_utc": datetime.now(timezone.utc).isoformat(), "domain": "rwawatch", "signal": fetch_signal()}
+    return {"timestamp_utc": datetime.now(timezone.utc).isoformat(), "domain": "rwawatch",
+            "signal": fetch_signal(), "etf_signal": fetch_etf_signal()}
 
 
 if __name__ == "__main__":

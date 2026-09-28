@@ -3,7 +3,7 @@ SRC = os.path.dirname(os.path.dirname(os.path.abspath(__file__))); S = sys.argv[
 M = [  # (name, file, old, new)
  ("EVM positive control", "rwawatch.py", 'ok = "DOMAIN_SEPARATOR" in s["eip712_entry_points"] and s["domain_separator_answers"]', "ok = True"),
  ("EVM chain id", "rwawatch.py", 'if node["chain_id"] != node["expected_chain_id"]:', "if False:"),
- ("EVM stale block", "rwawatch.py", 'if node["block_age_s"] > MAX_BLOCK_AGE_S:\n            return {"chain": chain,', 'if False:\n            return {"chain": chain,'),
+ ("EVM stale block", "rwawatch.py", 'if node["block_age_s"] > MAX_BLOCK_AGE_S:\n        return {"chain": chain,', 'if False:\n        return {"chain": chain,'),
  ("node fault != revert", "rwawatch.py", 'if t["symbol"] is None or t["total_supply"] is None:\n                return {"chain": chain,', 'if False:\n                return {"chain": chain,'),
  ("small proxy w/o impl", "rwawatch.py", 'if t["implementation"] is None and t["proxy_code_bytes"] < 1024:', "if False:"),
  ("Solana control", "rwawatch.py", '"ok": all(n in cext for n in need)', '"ok": True'),
@@ -28,7 +28,12 @@ M = [  # (name, file, old, new)
  ("search positive control", "rwawatch.py", 'by_fund[e["token"]] = by_fund.get(e["token"], False) or e["address"].lower() in found', 'by_fund[e["token"]] = True'),
  ("agent: search sight lost", "rwawatch_agents.py", "    if lost:\n        return \"ELEVATED\"", "    if False:\n        return \"ELEVATED\""),
  ("orchestrator: per-chain baseline", "rwawatch_orchestrator.py", "    previous = baseline(memory)", "    previous = next((r[\"snapshot\"] for r in reversed(memory) if r.get(\"snapshot\")), None)"),
+ ("scaled UI effective multiplier", "rwawatch.py", 'if ts is not None and cfg.get("newMultiplier") is not None and now >= int(ts):', "if False:"),
  ("threshold non-regression", "rwawatch_orchestrator.py", "if best_q > -1e9 and (base_q is None or best_q > base_q):", "if best_q > -1e9:"),
+ ("beacon resolver", "rwawatch.py", 'bv = rpc(chain, "eth_getStorageAt", [address, BEACON_SLOT, block])', "bv = None"),
+ ("beacon impl must have code", "rwawatch.py", 'if len(c) > 200:\n                return {"implementation": cand, "code": c, "slot": "beacon"', 'if True:\n                return {"implementation": cand, "code": c, "slot": "beacon"'),
+ ("AccessControl member confirmed by hasRole", "rwawatch.py", "if not h or int(h, 16) != 1:\n            return None", "if False:\n            return None"),
+ ("ETF Solana gate", "rwawatch.py", "gate = solana_node_gate(now)", 'gate = {"ok": True, "slot": None, "node": None, "ctl": None}'),
 ]
 bad = 0
 for name, f, old, new in M:

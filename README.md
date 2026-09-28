@@ -1,14 +1,16 @@
 # OMEGA-RWAWatch
 
 > Independent project, not affiliated with, reviewed or endorsed by BlackRock, Securitize, J.P. Morgan, Franklin
-> Templeton or Circle. It reads public on-chain data only. It is **not** an official NAV, price or
-> assets-under-management feed: a total supply is not a fund's assets. Issuers and funds are named only to identify
-> the contracts read.
+> Templeton, Circle, Backed Assets, Ondo or State Street. It reads public on-chain data only. It is **not** an official
+> NAV, price or assets-under-management feed: a total supply is not a fund's assets, nor an ETF's NAV. Issuers,
+> funds and ETFs are named only to identify the contracts read.
 
 Records, on a hash-chained memory, what the contracts of five tokenized money-market / treasury funds report on ten
-chains — total supply, controlling key, contract structure, and whether signed-authorization entry points
-(EIP-712 / EIP-2612 / EIP-3009) or, on Aptos, signature primitives exist — each reading at a recorded block, slot,
-ledger version or Stellar ledger, from public nodes.
+chains, and — since 2026-09-28 — what the contracts of four tokenized ETF trackers (bCSPX, bIB01, SPYx, IBITon) report
+on Ethereum, Base, BNB Chain and Solana — total supply, controlling key, contract structure, and whether signed-authorization entry points
+(EIP-712 / EIP-2612 / EIP-3009), ERC-3643 / ERC-7943 permissioned entry points or, on Solana, Token-2022 control
+extensions exist — each reading at a recorded block, slot, ledger version or Stellar ledger, from public nodes.
+A total supply is a token count: not a fund's assets, not an ETF's NAV.
 
 | Fund token | Issuer | Chains watched |
 |------------|--------|----------------|
@@ -17,10 +19,77 @@ ledger version or Stellar ledger, from public nodes.
 | BENJI | Franklin Templeton (FOBXX) | Ethereum, Polygon, Arbitrum, Avalanche, Base, Solana, Aptos, Stellar |
 | USYC | Circle | Ethereum, BNB, Solana |
 
+## Tokenized ETFs (added 2026-09-28)
+
+A distinct asset class from the funds above: each token tracks one listed ETF, as its issuer describes it. The method is the same — the
+address is read on-chain at a block or slot, the controlling key (`owner()` on EVM, mint and freeze authority on
+Solana) is compared with the one recorded for the issuer, and the control surface of the code is fingerprinted.
+**Total supply is a token count. It is not AUM and it is not the underlying ETF's NAV.** The lifecycle column is
+what the issuer declares, with the date it was read; it is not measured on-chain. Blocks/slots below are readings of
+2026-09-28 made at three moments (12:25, 14:11 and 14:24 UTC), each at the block/slot shown; a cycle records one block
+per chain. On Solana, a Token-2022 mint with `scaledUiAmountConfig` shows
+holders `raw × multiplier` (splits, reinvested dividends): the record keeps the raw amount (`total_supply`) and, apart,
+the effective multiplier and `ui_amount`. SPYx's multiplier is 1.0057146 (so the two differ by 0.57%); IBITon's is 1.
+
+| Token | Underlying ETF | Chain (read at) | Total supply, 2026-09-28 | Control tie | Lifecycle (declared) |
+|-------|----------------|-----------------|--------------------------|-------------|----------------------|
+| bCSPX | iShares Core S&P 500 UCITS (CSPX) | Ethereum (block 26075939) | 3,343.43 | `owner()` = 0x22f2dfe…1603 ✓ | redemption only (issuer page: no new issuance) |
+| bCSPX | iShares Core S&P 500 UCITS (CSPX) | Base (block 51904493) | 10,000.00 | `owner()` = 0xd1966bd…1d80 ✓ (a different key from Ethereum) | redemption only (issuer page: no new issuance) |
+| bIB01 | iShares $ Treasury Bond 0-1yr UCITS | Ethereum (block 26075939) | 45,326.80 | `owner()` = 0x22f2dfe…1603 ✓ | redemption only (issuer page: no new issuance) |
+| SPYx | SPDR S&P 500 ETF Trust (SPY) | Solana, Token-2022 (slot 451345109) | 95,231.04 raw — 95,775.24 as displayed (multiplier 1.0057146) | mint authority 7pt9tkct… ✓, freeze authority JDq14BWv… ✓ | listed (xStocks catalog, read 2026-09-28) |
+| IBITon | iShares Bitcoin Trust ETF (IBIT) | Ethereum (block 26076466) | 594,883.78 | `owner()` reverts; AccessControl `DEFAULT_ADMIN_ROLE` sole member 0x3715b21…34f1 ✓ | listed (Ondo asset page, read 2026-09-28) |
+| IBITon | iShares Bitcoin Trust ETF (IBIT) | BNB Chain (block 124538507) | 4,777.18 | `DEFAULT_ADMIN_ROLE` sole member 0x8860bbf…3b26 ✓ (a different key from Ethereum) | listed (Ondo asset page, read 2026-09-28) |
+| IBITon | iShares Bitcoin Trust ETF (IBIT) | Solana, Token-2022 (slot 451342150) | 24.81 | mint authority 9foMHsSD… ✓, freeze authority 51QVCuHf… ✓ | listed (Ondo asset page, read 2026-09-28) |
+
+Issuer: Backed Assets (JE) Limited for the bTokens and SPYx (xStocks brand), Ondo Global Markets (BVI) Limited for
+IBITon. Every ETF address comes from the issuer's own page, read as raw HTML on 2026-09-28: IBITon from
+`app.ondo.finance/assets/ibiton` (its embedded `supportedNetworks` list; the page is dynamic, so no stable page hash),
+bCSPX and bIB01 from `assets.backed.fi/products/bcspx` and `/bib01` (explorer links under "Smart Contracts"), SPYx from
+the catalog at `xstocks.com/products` (embedded JSON; its underlying per `assets.backed.fi/products/sp500-xstock`). On-chain ties: the two Ethereum bTokens share one `owner()`;
+bCSPX on Base rests on the issuer page alone (its `owner()` is another key); SPYx shares its mint and freeze authority
+with xStocks NVDAx; IBITon's admin keys are recorded to detect a change, not as an independent tie. All were read
+on-chain on 2026-09-28. The three bTokens expose EIP-2612 `permit`; SPYx carries all five Token-2022
+control extensions watched (`permanentDelegate`, `defaultAccountState`, `pausableConfig`, `transferHook`,
+`confidentialTransferMint`); IBITon on Solana carries four of them (no `permanentDelegate`); on both mints the
+`transferHook` has no hook program set.
+
+**Beacon proxies (added 2026-09-28).** The IBITon EVM contracts are EIP-1967 *beacon* proxies: the proxy stores a
+beacon address, and the executing code is what the beacon's `implementation()` returns. The resolver
+(`locate_implementation`, shared by the structure read and the permissioned scan) tries the direct slots first and
+the beacon only afterwards, so every contract already registered keeps its fingerprint unchanged (measured before/
+after, 2026-09-28: 23/23 identical against the previous commit — 16 fund contracts and 7 positive controls,
+`tools/negctl_structure.py HEAD~1` — and the 3 bTokens identical against a baseline taken before the change, not kept in the repo). A beacon whose `implementation()`
+reverts, or points to an address without code, leaves the implementation *not located* and the reading NOT
+ASSESSED. IBITon's code carries `compliance()`, which answers with a contract address (1,403 bytes; its `owner()` is a
+key other than IBITon's admin, so its relation to the issuer is not established on-chain; its bytecode contains
+no PUSH4 of ICompliance `canTransfer`, `bindToken` or `isTokenBound`). Called directly,
+`identityRegistry()`, `isFrozen()` and `canTransfer()` revert (measured 2026-09-28). The byte scan's absence of the
+other selectors is still not asserted: IBITon exposes no `permit`, so the scan's positive control cannot pass on it.
+
+**Permissioned-token scan (ERC-3643 / ERC-7943).** The ten 4-byte selectors of the T-REX and uRWA entry points (uRWA as in its
+Final text of 2026-05-05; `canTransfer(address,address,uint256)` has the same selector in both — on the token in uRWA,
+on the Compliance module in T-REX — and `forcedTransfer` is on the token in both) are hardcoded (keccak-256 computed
+offline, recomputable; the runtime stays stdlib-only) and searched in the executing
+bytecode. On the three Backed contracts today the result is *absent*: control sits in `owner()` and `permit`, not in
+an on-chain identity registry. That absence is reported only because the scan first passes a positive control — it
+must see `permit` (`d505accf`) on the same bytecode where it is known to exist — and it did on all three.
+**Limit:** the scan is validated on its mechanism, not against a deployed ERC-3643 contract in the registry. Until one
+is added, "absent" means "the selectors are not in this bytecode", nothing more.
+
+**A same-named token, checked by hand (2026-09-28).** A token listed on OpenSea as "QQQX" (mint `AAmDPyYbvXkqCX8CBRR7w1m2XiGMcTuV9BRdL7miMJyM`) sits on the legacy Token program, has
+no mint or freeze authority and no extensions, with a supply of 299.9 M. The xStocks mints are Token-2022 with mint
+authority `7pt9tkct…`. The two do not match, so it is not registered. This layer runs no explorer search of its own (the search exists
+for the funds only), so this check was manual and the cycle does not repeat it. Of the seven contracts registered,
+three are redemption-only per their issuer; the same-named QQQX is not tied to the xStocks keys (imitation or unrelated
+token: not told apart here).
+
+OMEGA-RWAWatch verifies what tokenized funds and ETFs report on-chain — supply, controlling key, control surface —
+at a recorded block, and keeps the record. It does not value, price, rate or predict any of them.
+
 ## Where the addresses come from
 
-Every address comes from the issuer's own page, checked 25/09/2026 (sha256 of the raw HTML recorded in `REGISTRY`),
-with one exception:
+For the five funds, every address comes from the issuer's own page, checked 25/09/2026 (sha256 of the raw HTML recorded
+in `REGISTRY`), with one exception (the tokenized ETFs have their own provenance, stated in the section above):
 
 - **BUIDL** — [blackrock.com/…/blackrock-token-addresses](https://www.blackrock.com/corporate/compliance/scams-and-fraud/blackrock-token-addresses):
   six of the seven EVM addresses, Solana and Aptos. The BNB Chain address is **not** on that page: it comes from
@@ -103,8 +172,8 @@ python -m omega_evidence evidence/<pack>.json --ledger evidence/rwawatch_evidenc
 ```bash
 python3 rwawatch.py                 # one snapshot, printed, not saved
 python3 rwawatch_orchestrator.py    # one cycle, appended to the memory (+ signed pack if omega-evidence is installed)
-python3 tests/test_rwawatch.py      # 39 tests, no network, no wall clock; every write sandboxed
-mkdir -p /tmp/abl/home && python3 tools/ablate_guards.py /tmp/abl   # 28 scripted mutations of the guards: each must turn the suite red
+python3 tests/test_rwawatch.py      # 59 tests, no network, no wall clock; every write sandboxed
+mkdir -p /tmp/abl/home && python3 tools/ablate_guards.py /tmp/abl   # 33 scripted mutations of the guards: each must turn the suite red
 ```
 
 The watcher needs nothing beyond the standard library: Ed25519 and ML-DSA-65 are not in it, so the signed evidence
@@ -158,7 +227,7 @@ Every reading of the 14:42 cycle's kind was repeated at about 15:05 UTC on a sec
 avax.network, binance dataseed, base.org, optimism.io; a second Solana RPC; the Aptos fullnode at the same ledger
 version; the LOBSTR Horizon): 16/16 EVM readings identical at the same block (total supply and owner), Solana 3/3,
 Aptos 2/2, Stellar supply and signer set identical. The test suite is checked by 28 scripted mutations of its guards
-(`tools/ablate_guards.py`); none survives (re-measured 28/09/2026: 0 of 28).
+(`tools/ablate_guards.py`); none survived (on 28/09/2026, after the ETF layer, the tool has 33 mutations: 0 of 33).
 
 The cycle's pack verified `PASS`, `pq_protected`, with the Python verifier and with the Node one (`oeverify.mjs`); the
 same pack with one digit of the body changed fails `pack-sha3`. A cycle with discovery takes about 8 minutes.

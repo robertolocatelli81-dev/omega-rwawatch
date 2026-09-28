@@ -66,11 +66,15 @@ class TestChain(unittest.TestCase):
 class FakeNode:
     """Answers eth_* like a node: a proxy at BUIDL whose implementation lacks EIP-712, and a control token with it."""
     def __init__(self, control_has_eip712=True, chain_id=None, block_ts=1_000_000, owner=core.EXPECTED_OWNER,
-                 fail_selector=None, impl_slot=True, symbol=b"BUIDL", diamond=None, revert_selector=None):
+                 fail_selector=None, impl_slot=True, symbol=b"BUIDL", diamond=None, revert_selector=None,
+                 beacon=None, impl_code=None, admin_member=None):
         self.revert_selector = revert_selector
         self.symbol, self.diamond = symbol, diamond      # diamond: None, or {"selectors": [...], "name_mapped": bool}
         self.control_has, self.chain_id, self.block_ts = control_has_eip712, chain_id, block_ts
         self.owner, self.fail_selector, self.impl_slot = owner, fail_selector, impl_slot
+        # beacon: None (slot empty) | "ok" (implementation() -> 0x11..) | "revert" | "nocode" (-> an address w/o code)
+        # impl_code: the code at 0x11.. ; admin_member: None (no AccessControl) or (address, has_role) for role 0x00
+        self.beacon, self.impl_code, self.admin_member = beacon, impl_code or ("0x60" + "00" * 200), admin_member
 
     def __call__(self, chain, method, params, timeout=25):
         if method == "eth_blockNumber":
@@ -85,16 +89,39 @@ class FakeNode:
             if addr.lower() == "0x" + "f1" * 20:
                 return "0x60" + "01" * 300                                  # a facet's code
             if addr.lower() == "0x" + "11" * 20:
-                return "0x60" + "00" * 200                                  # implementation code, no EIP-712
+                return self.impl_code                                       # implementation code (default: no EIP-712)
+            if addr.lower() == "0x" + "77" * 20:
+                return "0x"                                                 # an address WITHOUT code
             if addr.lower() == ctl:
                 return "0x" + ("3644e515d505accf" if self.control_has else "00") * 120
             return "0x" + "00" * 170
         if method == "eth_getStorageAt":
             if self.impl_slot and addr.lower() != ctl and params[1] == core.PROXY_SLOTS["eip1967"]:
                 return "0x" + "00" * 12 + "11" * 20
+            if self.beacon and addr.lower() != ctl and params[1] == core.BEACON_SLOT:
+                return "0x" + "00" * 12 + "b1" * 20                           # the BEACON's address
             return "0x" + "00" * 32
         if method == "eth_call":
             data = params[0]["data"]
+            if addr.lower() == "0x" + "b1" * 20:                              # the beacon
+                if data == core.BEACON_IMPL_SELECTOR and self.beacon == "ok":
+                    return "0x" + "00" * 12 + "11" * 20
+                if data == core.BEACON_IMPL_SELECTOR and self.beacon == "nocode":
+                    return "0x" + "00" * 12 + "77" * 20
+                raise core.RpcError("execution reverted")
+            if data.startswith(("0x" + core.ACCESS_CONTROL_SELECTORS["getRoleMemberCount"],
+                                "0x" + core.ACCESS_CONTROL_SELECTORS["getRoleMember"],
+                                "0x" + core.ACCESS_CONTROL_SELECTORS["hasRole"])):
+                if not self.admin_member or addr.lower() == ctl:
+                    raise core.RpcError("execution reverted")                 # no AccessControl here
+                member, has = self.admin_member
+                if data.startswith("0x" + core.ACCESS_CONTROL_SELECTORS["getRoleMemberCount"]):
+                    return "0x" + "0" * 63 + "1"
+                if data.startswith("0x" + core.ACCESS_CONTROL_SELECTORS["getRoleMember"]):
+                    if data.endswith("0" * 64):
+                        return "0x" + "00" * 12 + member[2:]
+                    raise core.RpcError("execution reverted: panic: array out-of-bounds access (0x32)")
+                return "0x" + "0" * 63 + ("1" if has and data.endswith(member[2:].lower()) else "0")
             if self.revert_selector and data.startswith(self.revert_selector) and addr.lower() != ctl:
                 raise core.RpcError("execution reverted")
             if self.fail_selector and data.startswith(self.fail_selector) and addr.lower() != ctl:
@@ -110,6 +137,8 @@ class FakeNode:
                     return "0x" + word("20") + word(hex(len(sels))[2:]) + "".join(x.ljust(64, "0") for x in sels)
                 return "0x" + word("f1" * 20 if self.diamond["name_mapped"] else "0")
             if data == "0x8da5cb5b":
+                if self.owner is None:
+                    raise core.RpcError("execution reverted")                    # no owner(): IBITon's shape
                 return "0x" + "00" * 12 + self.owner[2:]
             if data == "0x3644e515":
                 if addr.lower() == ctl and self.control_has:
@@ -604,6 +633,215 @@ class TestCycleSandboxed(unittest.TestCase):
         self.assertEqual([_fingerprint(p) for p in (orch.MEMORY, orch.LATEST, orch.KEY_PATH, orch.PQ_KEY_PATH)], before,
                          "a test must leave the production memory, latest record and signing seed untouched")
 
+
+class TestETF(unittest.TestCase):
+    """Tokenized-ETF layer: the permissioned byte scan with its own positive control, and the Solana authority tie.
+    No network — core.rpc / core._sol_mint are faked."""
+
+    def setUp(self):
+        self._rpc, self._sol = core.rpc, core._sol_mint
+
+    def tearDown(self):
+        core.rpc, core._sol_mint = self._rpc, self._sol
+
+    def _fake_code(self, code_hex):
+        def rpc(chain, method, params, timeout=25):
+            if method == "eth_getCode":
+                return "0x" + code_hex
+            if method == "eth_getStorageAt":
+                return "0x0"                                   # no proxy: implementation code == the code returned
+            raise AssertionError(f"unexpected {method}")
+        return rpc
+
+    def test_permissioned_scan_sees_selectors_and_controls_itself(self):
+        # code carries ERC-3643 canTransfer (e46638e6) AND the permit control selector (d505accf)
+        core.rpc = self._fake_code("00" * 4 + "e46638e6" + "11" * 4 + "d505accf" + "22" * 4)
+        r = core.read_permissioned("ethereum", "0xabc", "0x1")
+        self.assertIn("erc3643+7943:canTransfer", r["permissioned_interfaces"])
+        self.assertTrue(r["scan_control_permit_visible"])
+
+    def test_permissioned_scan_control_fails_when_permit_absent(self):
+        # no permit selector in the code: the scan cannot be trusted to report ABSENCE of 3643/7943
+        core.rpc = self._fake_code("00" * 8)
+        r = core.read_permissioned("ethereum", "0xabc", "0x1")
+        self.assertEqual(r["permissioned_interfaces"], [])
+        self.assertFalse(r["scan_control_permit_visible"])
+
+    def test_solana_etf_authority_tie(self):
+        def sol_ok(addr):
+            return (10, core.XSTOCKS_TOKEN2022, {"decimals": 8, "supply": "100000000",
+                    "mintAuthority": core.XSTOCKS_MINTER, "freezeAuthority": core.XSTOCKS_FREEZER},
+                    {"permanentDelegate": None, "pausableConfig": None, "metadataPointer": None})
+        core._sol_mint = sol_ok
+        out = core.read_etf_solana(core.ETF_REGISTRY_SOLANA)[0]
+        self.assertTrue(out["same_mint_authority"] and out["same_freeze_authority"] and out["token2022"])
+        self.assertEqual(out["total_supply"], 1.0)                              # 100000000 / 10**8
+        self.assertIn("permanentDelegate", out["permissioned_controls"])
+        self.assertNotIn("metadataPointer", out["permissioned_controls"])       # plain metadata is not a control
+
+    def test_solana_wrong_mint_authority_is_flagged(self):
+        def sol_bad(addr):
+            return (10, "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", {"decimals": 8, "supply": "29990000000000000",
+                    "mintAuthority": None, "freezeAuthority": None}, {})          # the AAmD… imitation shape
+        core._sol_mint = sol_bad
+        out = core.read_etf_solana(core.ETF_REGISTRY_SOLANA)[0]
+        self.assertFalse(out["same_mint_authority"])
+        self.assertFalse(out["token2022"])
+
+    def test_etf_registry_addresses_are_distinct_and_lowercased_ties(self):
+        addrs = [e["address"].lower() for e in core.ETF_REGISTRY_EVM]
+        self.assertEqual(len(addrs), len(set(addrs)))                            # no duplicate contracts
+        self.assertEqual(len(core.PERMISSIONED_SELECTORS), 10)                   # 2 shared + 4 ERC-3643 + 4 ERC-7943 Final
+        self.assertNotIn("39f648aa", core.PERMISSIONED_SELECTORS.values())   # pre-Final draft isTransferAllowed
+
+    def test_permissioned_scan_sees_erc7943_final_entry_points(self):
+        # a uRWA token as in the FINAL text exposes canSend / canReceive (2bc06a92 / 90d370ba), plus permit (control)
+        core.rpc = self._fake_code("00" * 4 + "2bc06a92" + "11" * 4 + "90d370ba" + "22" * 4 + "d505accf")
+        r = core.read_permissioned("ethereum", "0xabc", "0x1")
+        self.assertTrue({"erc7943:canSend", "erc7943:canReceive"} <= set(r["permissioned_interfaces"]))
+        self.assertTrue(r["scan_control_permit_visible"])
+
+    def test_etf_solana_layer_passes_the_same_gate_as_the_fund_layer(self):
+        # 28/09: the ETF Solana read had no genesis / freshness / positive-control gate — a node on another cluster
+        # or a reader blind to Token-2022 extensions was still "assessed". Now the same gate as read_solana.
+        saved_evm, saved_post = core.ETF_REGISTRY_EVM, core._post_json
+        core.ETF_REGISTRY_EVM = []
+        try:
+            core._post_json = TestNonEvm._sol(control_ext=())                   # PYUSD's extensions not seen
+            s = core.fetch_etf_signal(now=1_000_010)
+            self.assertEqual(s["chains_not_assessed"], ["solana"])
+            self.assertIn("positive control failed", s["chains"][0]["reason"])
+            self.assertNotIn("tokens", s["chains"][0])
+            core._post_json = TestNonEvm._sol()
+            s = core.fetch_etf_signal(now=1_000_010)
+            self.assertEqual(s["chains_assessed"], ["solana"])
+            self.assertEqual(s["chains"][0]["block"], 450)
+            self.assertEqual(len(s["chains"][0]["tokens"]), len(core.ETF_REGISTRY_SOLANA))
+        finally:
+            core.ETF_REGISTRY_EVM, core._post_json = saved_evm, saved_post
+
+
+class TestBeaconProxy(unittest.TestCase):
+    """28/09: IBITon (Ondo) is an EIP-1967 BEACON proxy — no direct implementation slot, the beacon answers
+    implementation(). Positive: resolved through the beacon. Negatives: empty beacon slot, a beacon whose
+    implementation() reverts, a beacon pointing at an address without code — NOT ASSESSED, never a clean read."""
+    ADMIN = "0x3715b2154d2ff4c5b027c7a1f734b53f27bc34f1"
+    IBITON = [{"token": "IBITon", "address": "0x" + "22" * 20, "underlying": "u", "issuer": "i", "status": "live",
+               "status_source": "s", "provenance": "p", "expected_owner": ADMIN, "expected_owner_kind": "AccessControl"}]
+
+    def setUp(self):
+        self._rpc = core.rpc
+
+    def tearDown(self):
+        core.rpc = self._rpc
+
+    def test_beacon_proxy_resolved_to_its_implementation(self):
+        core.rpc = FakeNode(True, impl_slot=False, beacon="ok", impl_code="0x60" + "00" * 100 + "d505accf" + "00" * 100)
+        c = core.read_chain("arbitrum", ENTRY, now=NOW, discovery=False)
+        self.assertTrue(c["assessed"], c)
+        t = c["tokens"][0]
+        self.assertEqual((t["implementation"], t["implementation_slot"], t["beacon"]),
+                         ("0x" + "11" * 20, "beacon", "0x" + "b1" * 20))
+        self.assertEqual(t["eip712_entry_points"], ["permit"])              # scanned on the BEACON's implementation
+        # read_permissioned goes through the same resolver: its scan control sees permit on that code
+        p = core.read_permissioned("arbitrum", "0x" + "22" * 20, "0x10")
+        self.assertTrue(p["scan_control_permit_visible"])
+
+    def test_direct_slot_wins_over_beacon(self):
+        # negative control of the ORDER: a contract with an eip1967 slot keeps its fingerprint even if a beacon slot
+        # is also set — the beacon is tried only after the direct slots
+        core.rpc = FakeNode(True, impl_slot=True, beacon="ok")
+        s = core.read_structure("arbitrum", "0x" + "22" * 20, "0x10")
+        self.assertEqual((s["implementation_slot"], "beacon" in s), ("eip1967", False))
+
+    def test_beacon_whose_implementation_reverts_is_not_assessed(self):
+        core.rpc = FakeNode(True, impl_slot=False, beacon="revert")
+        c = core.read_chain("arbitrum", ENTRY, now=NOW, discovery=False)
+        self.assertFalse(c["assessed"])
+        self.assertIn("implementation not located", c["reason"])
+
+    def test_beacon_pointing_at_address_without_code_is_not_assessed(self):
+        core.rpc = FakeNode(True, impl_slot=False, beacon="nocode")
+        c = core.read_chain("arbitrum", ENTRY, now=NOW, discovery=False)
+        self.assertFalse(c["assessed"])
+        self.assertIn("implementation not located", c["reason"])
+        s = core.read_structure("arbitrum", "0x" + "22" * 20, "0x10")
+        self.assertIsNone(s["implementation"])
+
+    def test_empty_beacon_slot_is_not_assessed(self):
+        core.rpc = FakeNode(True, impl_slot=False, beacon=None)
+        c = core.read_chain("arbitrum", ENTRY, now=NOW, discovery=False)
+        self.assertFalse(c["assessed"])
+        self.assertIn("implementation not located", c["reason"])
+
+    def test_etf_control_key_from_access_control_when_owner_reverts(self):
+        core.rpc = FakeNode(True, owner=None, impl_slot=False, beacon="ok", admin_member=(self.ADMIN, True))
+        r = core.read_etf_evm("ethereum", "0x10", self.IBITON)[0]
+        self.assertTrue(r["readable"], r)
+        self.assertIsNone(r["owner"])
+        self.assertEqual((r["control_key"], r["same_owner"], r["implementation_slot"]), (self.ADMIN, True, "beacon"))
+        self.assertIn("DEFAULT_ADMIN_ROLE", r["control_key_kind"])
+        self.assertEqual(r["admin_role_members"], {"count": 1, "members": [self.ADMIN]})
+
+    def test_etf_control_key_not_recorded_when_hasrole_denies_it(self):
+        # the enumeration names a member the contract denies: no key, "not comparable" — never a false tie
+        core.rpc = FakeNode(True, owner=None, impl_slot=False, beacon="ok", admin_member=(self.ADMIN, False))
+        r = core.read_etf_evm("ethereum", "0x10", self.IBITON)[0]
+        self.assertIsNone(r["control_key"])
+        self.assertIsNone(r["same_owner"])
+
+    def test_etf_without_expected_key_is_not_comparable_not_a_crash(self):
+        entry = [dict(self.IBITON[0], expected_owner=None, expected_owner_kind=None)]
+        core.rpc = FakeNode(True, owner=None, impl_slot=False, beacon="ok", admin_member=None)
+        r = core.read_etf_evm("ethereum", "0x10", entry)[0]
+        self.assertEqual((r["control_key"], r["same_owner"], r["expected_owner"]), (None, None, None))
+        # and a Backed-shaped token (owner() answers) reads exactly as before
+        core.rpc = FakeNode(True, owner="0x" + "ab" * 20)
+        r = core.read_etf_evm("ethereum", "0x10", [dict(self.IBITON[0], expected_owner="0x" + "ab" * 20)])[0]
+        self.assertEqual((r["control_key_kind"], r["same_owner"], r["implementation_slot"]), ("owner()", True, "eip1967"))
+
+    def test_etf_proxy_without_located_implementation_is_unreadable(self):
+        core.rpc = FakeNode(True, owner=None, impl_slot=False, beacon="revert", admin_member=(self.ADMIN, True))
+        r = core.read_etf_evm("ethereum", "0x10", self.IBITON)[0]
+        self.assertFalse(r["readable"])
+        self.assertIn("implementation not located", r["reason"])
+
+    def test_ibiton_registry_entries_carry_a_measured_key_and_the_primary_source(self):
+        evm = [e for e in core.ETF_REGISTRY_EVM if e["token"] == "IBITon"]
+        self.assertEqual(sorted(e["chain"] for e in evm), ["bsc", "ethereum"])
+        for e in evm:
+            self.assertIn("app.ondo.finance", e["provenance"])
+            self.assertIn("DEFAULT_ADMIN_ROLE", e["expected_owner_kind"])
+            self.assertRegex(e["expected_owner"], r"^0x[0-9a-f]{40}$")
+        sol = [e for e in core.ETF_REGISTRY_SOLANA if e["token"] == "IBITon"]
+        self.assertEqual(len(sol), 1)
+        self.assertIn("app.ondo.finance", sol[0]["provenance"])
+
+
+class TestScaledUi(unittest.TestCase):
+    """Token-2022 scaledUiAmountConfig: the raw amount and the amount holders see are two different quantities."""
+    CFG = {"scaledUiAmountConfig": {"multiplier": "1.0039", "newMultiplier": "1.0057",
+                                    "newMultiplierEffectiveTimestamp": 1_000_000}}
+
+    def test_new_multiplier_applies_only_from_its_timestamp(self):
+        self.assertEqual(core.scaled_ui_multiplier(self.CFG, 999_999), (1.0039, "multiplier"))
+        self.assertEqual(core.scaled_ui_multiplier(self.CFG, 1_000_000), (1.0057, "newMultiplier"))
+
+    def test_mint_without_the_extension_has_no_multiplier(self):
+        self.assertEqual(core.scaled_ui_multiplier({"permanentDelegate": None}, 5), (None, None))
+
+    def test_reader_keeps_raw_amount_and_ui_amount_apart(self):
+        saved = core._sol_mint
+        try:
+            core._sol_mint = lambda a: (10, core.XSTOCKS_TOKEN2022, {"decimals": 8, "supply": "200000000",
+                                        "mintAuthority": core.XSTOCKS_MINTER,
+                                        "freezeAuthority": core.XSTOCKS_FREEZER}, dict(self.CFG))
+            out = core.read_etf_solana(core.ETF_REGISTRY_SOLANA[:1], now=2_000_000)[0]
+        finally:
+            core._sol_mint = saved
+        self.assertEqual(out["total_supply"], 2.0)                          # raw: 200000000 / 10**8
+        self.assertAlmostEqual(out["ui_amount"], 2.0 * 1.0057)              # what holders see
+        self.assertEqual(out["ui_multiplier_field"], "newMultiplier")
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
