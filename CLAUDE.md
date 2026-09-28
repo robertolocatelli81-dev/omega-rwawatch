@@ -6,7 +6,7 @@ four tokenized funds** — BlackRock BUIDL, J.P. Morgan JLTXX, Franklin Templeto
 EVM + Solana, Aptos, Stellar). It **VERIFIES** and records; it does **NOT** forecast, value, or rate any fund. Not
 affiliated with any issuer; not an official NAV/AUM feed. Registry source: each issuer's own address page (BUIDL BNB
 is the only exception, tied by shared owner()). GitHub: create/push ONLY after Fable 5 review
-(Roberto's order, 25/09/2026).
+(Roberto's order, 25/09/2026; review done 28/09/2026 — see the publication report in the OMEGA workbench).
 
 ## Hard constraint
 Lives entirely under `~/progetti/omega-rwawatch/`, own git repo, never writes into `~/omega/`. The hash-chain primitive
@@ -19,8 +19,11 @@ and says the pack is not written.
 - `rwawatch_agents.py` — council: coverage, structure (implementation code), signed-authorization entry points, supply move.
 - `rwawatch_orchestrator.py` — one cycle: snapshot → council vs previous → self-tune (rollback-guaranteed) → chain →
   optional signed pack. Signing seed: `~/.config/omega-rwawatch/signing.seed` (0600), or `$RWAWATCH_SIGNING_SEED`.
-- `tests/test_rwawatch.py` — no network (fake node); every write sandboxed in a temp dir.
-- `deploy/` — systemd `.service` + `.timer`, NOT enabled.
+- `tests/test_rwawatch.py` — 39 tests, no network (fake node); every write sandboxed in a temp dir.
+- `tools/ablate_guards.py` — 28 scripted mutations of the guards; each must make the suite fail (CI job `ablation`).
+- `deploy/` — systemd `.service` + `.timer`, NOT enabled (paths via the `%h` specifier).
+- `LICENSE` (BSL 1.1), `SECURITY.md`, `.github/workflows/ci.yml` (stdlib-only suite on 3.9/3.11/3.13, ablation,
+  evidence path with omega-evidence from its GitHub tag, gitleaks on the whole history).
 
 ## Conventions
 - English code and docstrings; honest-scope wording (verify ≠ predict).

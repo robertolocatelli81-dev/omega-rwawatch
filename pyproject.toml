@@ -5,14 +5,19 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "omega-rwawatch"
 version = "0.1.0"
-description = "Hash-chained on-chain readings of BlackRock's BUIDL tokenized fund on six EVM chains, with a positive control per chain"
+description = "Hash-chained on-chain readings of tokenized money-market / treasury fund tokens (BUIDL, JLTXX, MONY, BENJI, USYC) on ten public chains, with a node-identity, freshness and positive-control gate per chain and a deterministic council. Verify != predict; not a NAV/AUM feed."
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.9"
+license = { text = "BSL-1.1" }
 authors = [{ name = "Roberto Locatelli" }]
-dependencies = []   # stdlib only
+keywords = ["rwa", "tokenized-funds", "buidl", "on-chain", "audit", "hash-chain", "data-integrity", "eip-712", "evm", "solana", "aptos", "stellar"]
+dependencies = []   # stdlib only (measured on 3.9, 3.11, 3.13 — see .github/workflows/ci.yml)
 
+# The extra is needed ONLY for the optional signed evidence pack, never by the watcher itself.
+# omega-evidence is not on PyPI: it is installed from its GitHub tag (measured 2026-09-28: v0.9.1).
+# The ML-DSA-65 co-signature additionally needs cryptography >= 48.
 [project.optional-dependencies]
-evidence = ["omega-evidence"]
+evidence = ["omega-evidence @ git+https://github.com/robertolocatelli81-dev/omega-evidence@v0.9.1"]
 
 [project.scripts]
 rwawatch = "rwawatch_orchestrator:run_cycle"

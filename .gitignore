@@ -5,3 +5,8 @@ __pycache__/
 *.pid
 rwawatch_latest*.json
 evidence/
+# packaging / local environments (pyproject.toml makes the repo installable)
+*.egg-info/
+build/
+dist/
+.venv/

@@ -94,16 +94,30 @@ python -m omega_evidence evidence/<pack>.json --ledger evidence/rwawatch_evidenc
 | Chains | Ethereum, Arbitrum, Optimism, Polygon, Avalanche, BNB Chain, Base, Solana, Aptos, Stellar |
 | Sources | public nodes (publicnode.com; api.mainnet-beta.solana.com; api.mainnet.aptoslabs.com; horizon.stellar.org); explorer search APIs |
 | Memory | `rwawatch_memory.jsonl` — SHA-256 hash-chain |
-| Deps | Python stdlib; `omega-evidence` optional (signed pack; ML-DSA-65 needs `cryptography` ≥ 48) |
+| Deps | Python stdlib (3.9, 3.11, 3.13 in CI); `omega-evidence` optional (signed pack; ML-DSA-65 needs `cryptography` ≥ 48) |
 | Cadence | systemd timer provided in `deploy/`, **not enabled** |
+| License | BSL 1.1 (`LICENSE`); security reports: `SECURITY.md` |
 
 ## Run
 
 ```bash
 python3 rwawatch.py                 # one snapshot, printed, not saved
 python3 rwawatch_orchestrator.py    # one cycle, appended to the memory (+ signed pack if omega-evidence is installed)
-python3 tests/test_rwawatch.py      # 36 tests, no network, no wall clock; every write sandboxed
+python3 tests/test_rwawatch.py      # 39 tests, no network, no wall clock; every write sandboxed
+mkdir -p /tmp/abl/home && python3 tools/ablate_guards.py /tmp/abl   # 28 scripted mutations of the guards: each must turn the suite red
 ```
+
+The watcher needs nothing beyond the standard library. The signed evidence pack is optional; `omega-evidence` is not on
+PyPI and is installed from its GitHub tag:
+
+```bash
+pip install ".[evidence]" "cryptography>=48"   # omega-evidence v0.9.1 (GitHub) + the ML-DSA-65 backend
+```
+
+CI (`.github/workflows/ci.yml`) runs the suite stdlib-only on three Python versions, the guard ablation (every
+mutation must fail the suite), the suite again with the signing path live, and gitleaks over the whole history. The
+production memory, the latest record, the evidence packs and the signing keys are never committed (gitignored; the
+keys live in `~/.config/omega-rwawatch/`, mode 0600).
 
 ## Measured (25/09/2026, cycle 14:42 UTC)
 
@@ -142,8 +156,8 @@ names), Arbitrum 1 ("Hashnote USYC", supply 0), Polygon 3 named "Circle USYC" on
 Every reading of the 14:42 cycle's kind was repeated at about 15:05 UTC on a second provider (drpc, arbitrum.io,
 avax.network, binance dataseed, base.org, optimism.io; a second Solana RPC; the Aptos fullnode at the same ledger
 version; the LOBSTR Horizon): 16/16 EVM readings identical at the same block (total supply and owner), Solana 3/3,
-Aptos 2/2, Stellar supply and signer set identical. The test suite is checked by 27 scripted mutations of its guards;
-none survives.
+Aptos 2/2, Stellar supply and signer set identical. The test suite is checked by 28 scripted mutations of its guards
+(`tools/ablate_guards.py`); none survives (re-measured 28/09/2026: 0 of 28).
 
 The cycle's pack verified `PASS`, `pq_protected`, with the Python verifier and with the Node one (`oeverify.mjs`); the
 same pack with one digit of the body changed fails `pack-sha3`. A cycle with discovery takes about 8 minutes.

@@ -103,7 +103,7 @@ def write_evidence(record):
     try:
         from omega_evidence import pack as P, signing, trust
     except ImportError:
-        return {"written": False, "why": "omega-evidence not installed (pip install omega-evidence): no signed pack"}
+        return {"written": False, "why": "omega-evidence not installed (pip install '.[evidence]', from its GitHub tag): no signed pack"}
     if not os.path.exists(KEY_PATH):
         os.makedirs(os.path.dirname(KEY_PATH), exist_ok=True)
         fd = os.open(KEY_PATH, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)

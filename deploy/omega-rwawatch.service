@@ -5,8 +5,9 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/python3 /home/rupert81vc/progetti/omega-rwawatch/rwawatch_orchestrator.py
-Environment=HOME=/home/rupert81vc
-Environment=PATH=/home/rupert81vc/.local/bin:/usr/local/bin:/usr/bin:/bin
-Environment=PYTHONPATH=/home/rupert81vc/progetti/omega-evidence
-WorkingDirectory=/home/rupert81vc/progetti/omega-rwawatch
+# %h = the user's home (systemd specifier): the unit assumes a checkout at ~/progetti/omega-rwawatch.
+# PYTHONPATH is only needed if omega-evidence is used from a source tree rather than installed (pip install ".[evidence]").
+ExecStart=/usr/bin/python3 %h/progetti/omega-rwawatch/rwawatch_orchestrator.py
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PYTHONPATH=%h/progetti/omega-evidence
+WorkingDirectory=%h/progetti/omega-rwawatch
