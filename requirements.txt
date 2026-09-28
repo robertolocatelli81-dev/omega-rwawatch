@@ -1,1 +1,2 @@
-# OMEGA-RWAWatch — stdlib only (Python >= 3.8). Optional: omega-evidence, for the signed evidence pack.
+# OMEGA-RWAWatch — stdlib only (Python >= 3.9, measured on 3.9 / 3.11 / 3.13). Optional: the "evidence" extra in pyproject.toml
+# (omega-evidence pinned by commit + cryptography >= 48) for the signed, ML-DSA-65 co-signed evidence pack.
