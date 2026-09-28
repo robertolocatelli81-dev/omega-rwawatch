@@ -3,20 +3,24 @@
 """
 OMEGA-RWAWatch · core — real on-chain snapshot of tokenized real-world-asset funds + vendored hash-chain.
 
-Watches BlackRock's BUIDL tokenized fund (tokenized by Securitize) on the EVM chains where it is deployed: for each
-chain it reads, from a public RPC node and at a recorded block, the token's name, symbol, decimals and total supply,
-and the STRUCTURE of the contract (proxy size, implementation address and a SHA-256 of the implementation's code,
-presence of EIP-712 / EIP-2612 / EIP-3009 entry points). Before trusting a chain's readings it runs a POSITIVE
-CONTROL on the same node: a token known to expose EIP-712 (USDC, or a PancakeSwap LP on BNB) must be seen exposing it;
-if not, that chain is reported as NOT ASSESSED, never as clean.
+Watches the tokens of five tokenized money-market / treasury funds — BlackRock BUIDL (+ BUIDL-I, tokenized by
+Securitize), J.P. Morgan JLTXX and MONY, Franklin Templeton BENJI, Circle USYC — on the public chains where they are
+deployed (7 EVM chains, Solana, Aptos, Stellar). For each chain it reads, from a public node and at a recorded block /
+slot / ledger version, the token's name, symbol, decimals and total supply, the controlling key, and the STRUCTURE of
+the contract (proxy size, implementation address and a SHA-256 of the implementation's code — or the Diamond's loupe
+for EIP-2535 — presence of EIP-712 / EIP-2612 / EIP-3009 entry points). Before trusting a chain's readings it checks
+the node's identity and freshness and runs a POSITIVE CONTROL on the same node: a token known to expose EIP-712 (USDC,
+or a PancakeSwap LP on BNB), or the non-EVM equivalent, must be seen as expected; if not, that chain is reported as
+NOT ASSESSED, never as clean.
 
-Independent project, not affiliated with BlackRock or Securitize; not an official NAV/price/AUM feed.
+Independent project, not affiliated with, reviewed or endorsed by BlackRock, Securitize, J.P. Morgan, Franklin
+Templeton or Circle; not an official NAV/price/AUM feed; not financial advice.
 
 Honest scope: this VERIFIES and RECORDS public on-chain facts at a block and tracks them over time (the hash-chained
-memory IS the record). It does NOT predict, it does not value the fund, and a total supply is not assets under
-management. Six of the seven EVM addresses in REGISTRY are listed on BlackRock's own token-address page (OFFICIAL_PAGE);
-the BNB Chain one is not, and is tied to them by a shared owner(). Before any reading, each node must answer the
-expected eth_chainId with a fresh block. Stdlib only; the hash-chain is VENDORED (never imports from ~/omega/).
+memory IS the record). It does NOT predict, it does not value any fund, and a total supply is not assets under
+management. Every address comes from the issuer's own page (provenance recorded per entry in REGISTRY /
+NONEVM_REGISTRY); the one exception is BUIDL on BNB Chain, which is not on BlackRock's page and is tied to the listed
+contracts by a shared owner(). Stdlib only; the hash-chain is VENDORED (never imports from ~/omega/).
 
 Run:  python3 rwawatch.py            # one snapshot, printed, not saved
 """
