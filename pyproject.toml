@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "omega-rwawatch"
-version = "0.1.0"
+version = "0.2.0"
 description = "Hash-chained on-chain readings of tokenized money-market / treasury fund tokens (BUIDL, JLTXX, MONY, BENJI, USYC) on ten public chains, with a node-identity, freshness and positive-control gate per chain and a deterministic council. Verify != predict; not a NAV/AUM feed."
 readme = "README.md"
 requires-python = ">=3.9"
