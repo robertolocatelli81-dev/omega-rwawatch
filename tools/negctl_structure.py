@@ -25,7 +25,8 @@ def load_ref(ref):
     src = subprocess.run(["git", "show", f"{ref}:rwawatch.py"], cwd=ROOT, capture_output=True, text=True, check=True).stdout
     d = tempfile.mkdtemp(prefix="negctl_")
     p = os.path.join(d, "rwawatch_ref.py")
-    open(p, "w").write(src)
+    with open(p, "w") as fh:          # closed (flushed) before the module is imported from it
+        fh.write(src)
     spec = importlib.util.spec_from_file_location("rwawatch_ref", p)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)

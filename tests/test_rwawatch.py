@@ -4,7 +4,9 @@
 self-improve non-regression, and the evidence path. Stdlib unittest, NO network: a fake RPC answers.
 Every write goes to a temporary directory: the module paths are redirected before any cycle runs."""
 import copy
+import json
 import os
+import shutil
 import sys
 import tempfile
 import unittest
@@ -23,7 +25,8 @@ def _fingerprint(path):
     import hashlib
     if not os.path.exists(path):
         return (False, None, None)
-    data = open(path, "rb").read()
+    with open(path, "rb") as f:
+        data = f.read()
     return (True, len(data), hashlib.sha256(data).hexdigest())
 
 
@@ -842,6 +845,60 @@ class TestScaledUi(unittest.TestCase):
         self.assertEqual(out["total_supply"], 2.0)                          # raw: 200000000 / 10**8
         self.assertAlmostEqual(out["ui_amount"], 2.0 * 1.0057)              # what holders see
         self.assertEqual(out["ui_multiplier_field"], "newMultiplier")
+
+
+# The hash-chained memory survives an interrupted write, and verify_chain answers on a malformed record (2026-10-03).
+# Before: save_memory opened the real file with "w" (an exception mid-write left it truncated) and verify_chain
+# raised KeyError on a record without self_hash.
+class _Unserialisable:
+    pass
+
+
+class TestMemoryIntegrity(unittest.TestCase):
+    def setUp(self):
+        self.d = tempfile.mkdtemp(prefix="rwmem_")
+        self.path = os.path.join(self.d, "m.jsonl")
+        self.recs = []
+        for i in range(3):
+            core.append(self.recs, {"timestamp_utc": f"2026-10-0{i + 1}", "signal": {"metric": i}})
+
+    def tearDown(self):
+        shutil.rmtree(self.d, ignore_errors=True)
+
+    def test_interrupted_save_leaves_previous_memory_intact(self):
+        orch.save_memory(self.recs, self.path)
+        with open(self.path, encoding="utf-8") as f:
+            before = f.read()
+        broken = [{"x": _Unserialisable()}] + self.recs          # fails on the FIRST record: a direct "w" leaves it empty
+        with self.assertRaises(TypeError):
+            orch.save_memory(broken, self.path)
+        with open(self.path, encoding="utf-8") as f:
+            self.assertEqual(f.read(), before)
+        self.assertTrue(core.verify_chain(orch.load_memory(self.path))[0])
+        self.assertEqual(os.listdir(self.d), ["m.jsonl"])                  # no temporary file left behind
+
+    def test_save_then_load_round_trip(self):                      # positive control
+        orch.save_memory(self.recs, self.path)
+        self.assertEqual(orch.load_memory(self.path), self.recs)
+        with open(self.path + ".tmp", "w", encoding="utf-8") as f:  # a temporary left by a killed run is overwritten, never appended to
+            f.write("garbage\n")
+        orch.save_memory(self.recs, self.path)
+        self.assertEqual(orch.load_memory(self.path), self.recs)
+        self.assertEqual(os.listdir(self.d), ["m.jsonl"])
+
+    def test_malformed_record_is_a_verdict(self):
+        self.assertEqual(core.verify_chain(self.recs), (True, "PASS"))
+        g = self.recs[1]
+        body = {k: v for k, v in g.items() if k not in ("self_hash", "prev_hash")}
+        crafted = dict(body, self_hash=core.chain_hash(body))     # no prev_hash but a consistent self_hash: only the guard refuses it
+        for bad in ({k: v for k, v in g.items() if k != "self_hash"}, {k: v for k, v in g.items() if k != "prev_hash"},
+                    crafted, None, [1], "x", 7, {}):
+            with self.subTest(bad=json.dumps(bad, default=str)[:40]):
+                for chain, at in (([self.recs[0], bad, self.recs[2]], 1), ([bad], 0), (self.recs[:2] + [bad], 2)):
+                    # must not raise, must not skip the record (a malformed LAST record is not a PASS), same message everywhere
+                    self.assertEqual(core.verify_chain(chain), (False, f"malformed record at #{at}"))
+
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -560,6 +560,8 @@ def append(records, rec):
 def verify_chain(records):
     prev = GENESIS
     for i, r in enumerate(records):
+        if not isinstance(r, dict) or "self_hash" not in r or "prev_hash" not in r:   # a verdict, not a KeyError
+            return False, f"malformed record at #{i}"
         body = {k: v for k, v in r.items() if k != "self_hash"}
         if r["self_hash"] != chain_hash(body):
             return False, f"self_hash mismatch at #{i}"

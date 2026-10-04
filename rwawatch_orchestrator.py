@@ -40,9 +40,20 @@ def load_memory(path):
 
 
 def save_memory(records, path):
-    with open(path, "w", encoding="utf-8") as f:
-        for r in records:
-            f.write(json.dumps(r, ensure_ascii=False) + "\n")
+    """Write the hash-chained memory to a temporary file, fsync, then replace atomically: an interruption mid-write
+    (timer stopped, disk full, a record that does not serialise) leaves the previous memory intact, never truncated."""
+    tmp = path + ".tmp"
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            for r in records:
+                f.write(json.dumps(r, ensure_ascii=False) + "\n")
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+        raise
 
 
 def _series(memory):
@@ -109,7 +120,8 @@ def write_evidence(record):
         fd = os.open(KEY_PATH, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         with os.fdopen(fd, "w") as f:
             f.write(os.urandom(32).hex())
-    seed = bytes.fromhex(open(KEY_PATH).read().strip())
+    with open(KEY_PATH) as fk:
+        seed = bytes.fromhex(fk.read().strip())
     identity = signing.Identity("omega-rwawatch", seed)
     os.makedirs(EVIDENCE_DIR, exist_ok=True)
     stamp = record["timestamp_utc"].replace(":", "").replace("-", "")[:15]

@@ -172,7 +172,7 @@ python -m omega_evidence evidence/<pack>.json --ledger evidence/rwawatch_evidenc
 ```bash
 python3 rwawatch.py                 # one snapshot, printed, not saved
 python3 rwawatch_orchestrator.py    # one cycle, appended to the memory (+ signed pack if omega-evidence is installed)
-python3 tests/test_rwawatch.py      # 59 tests, no network, no wall clock; every write sandboxed
+python3 tests/test_rwawatch.py      # 62 tests, no network, no wall clock; every write sandboxed
 mkdir -p /tmp/abl/home && python3 tools/ablate_guards.py /tmp/abl   # 33 scripted mutations of the guards: each must turn the suite red
 ```
 

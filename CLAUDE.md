@@ -20,7 +20,7 @@ and says the pack is not written.
 - `rwawatch_agents.py` — council: coverage, structure (implementation code), signed-authorization entry points, supply move.
 - `rwawatch_orchestrator.py` — one cycle: snapshot → council vs previous → self-tune (rollback-guaranteed) → chain →
   optional signed pack. Signing seed: `~/.config/omega-rwawatch/signing.seed` (0600), or `$RWAWATCH_SIGNING_SEED`.
-- `tests/test_rwawatch.py` — 59 tests, no network (fake node); every write sandboxed in a temp dir.
+- `tests/test_rwawatch.py` — 62 tests, no network (fake node); every write sandboxed in a temp dir.
 - `tools/ablate_guards.py` — 33 scripted mutations of the guards; each must make the suite fail (CI job `ablation`).
 - `deploy/` — systemd `.service` + `.timer`, NOT enabled (paths via the `%h` specifier).
 - `LICENSE` (BSL 1.1), `SECURITY.md`, `.github/workflows/ci.yml` (stdlib-only suite on 3.9/3.11/3.13, ablation,

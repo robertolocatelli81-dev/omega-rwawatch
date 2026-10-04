@@ -39,10 +39,13 @@ bad = 0
 for name, f, old, new in M:
     d = os.path.join(S, "p"); shutil.rmtree(d, ignore_errors=True)
     shutil.copytree(SRC, d, ignore=shutil.ignore_patterns(".git", "evidence", "*.jsonl", "rwawatch_latest*.json", "__pycache__"))
-    p = os.path.join(d, f); src = open(p).read()
+    p = os.path.join(d, f)
+    with open(p) as fh:
+        src = fh.read()
     if src.count(old) != 1:
         print(f"?? {name}: pattern found {src.count(old)} times"); bad += 1; continue
-    open(p, "w").write(src.replace(old, new))
+    with open(p, "w") as fh:
+        fh.write(src.replace(old, new))
     r = subprocess.run([sys.executable, "tests/test_rwawatch.py"], cwd=d, capture_output=True, text=True, timeout=300,
                        env=dict(os.environ, HOME=os.path.join(S, "home")))
     red = [l.split("(")[0].replace("FAIL: ", "").replace("ERROR: ", "") for l in r.stderr.splitlines() if l.startswith(("FAIL:", "ERROR:"))]
