@@ -10,4 +10,5 @@ evidence/
 build/
 dist/
 .venv/
+*.jsonl.*.tmp
 *.jsonl.tmp

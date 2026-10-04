@@ -32,17 +32,27 @@ PQ_KEY_PATH = os.path.expanduser(os.environ.get("RWAWATCH_PQ_KEY", "~/.config/om
 THR_MIN, THR_MAX, THR_STEP, THR_INIT = 0.25, 20.0, 0.25, 2.0      # % move of total supply between runs
 
 
+def _no_duplicate_keys(pairs):
+    keys = [k for k, _ in pairs]
+    if len(keys) != len(set(keys)):
+        raise ValueError(f"duplicate key in a memory record: {sorted({k for k in keys if keys.count(k) > 1})}")
+    return dict(pairs)
+
+
 def load_memory(path):
+    """A record with a repeated key is refused: json.loads keeps the last value, so the chain would verify one value
+    while the bytes also carry another that a different reader may take (ValueError, the cycle stops)."""
     if os.path.exists(path):
         with open(path, encoding="utf-8") as f:
-            return [json.loads(line) for line in f if line.strip()]
+            return [json.loads(line, object_pairs_hook=_no_duplicate_keys) for line in f if line.strip()]
     return []
 
 
 def save_memory(records, path):
     """Write the hash-chained memory to a temporary file, fsync, then replace atomically: an interruption mid-write
-    (timer stopped, disk full, a record that does not serialise) leaves the previous memory intact, never truncated."""
-    tmp = path + ".tmp"
+    (timer stopped, disk full, a record that does not serialise) leaves the previous memory intact, never truncated.
+    Two cycles running at once each replace the whole file: the later one wins, one cycle may be lost, none is mixed."""
+    tmp = f"{path}.{os.getpid()}.tmp"                # one per process: two cycles at once never share a temporary
     try:
         with open(tmp, "w", encoding="utf-8") as f:
             for r in records:

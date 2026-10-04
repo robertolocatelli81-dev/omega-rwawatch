@@ -880,11 +880,22 @@ class TestMemoryIntegrity(unittest.TestCase):
     def test_save_then_load_round_trip(self):                      # positive control
         orch.save_memory(self.recs, self.path)
         self.assertEqual(orch.load_memory(self.path), self.recs)
-        with open(self.path + ".tmp", "w", encoding="utf-8") as f:  # a temporary left by a killed run is overwritten, never appended to
+        with open(f"{self.path}.{os.getpid()}.tmp", "w", encoding="utf-8") as f:  # a temporary left by a killed run is overwritten, never appended to
             f.write("garbage\n")
         orch.save_memory(self.recs, self.path)
         self.assertEqual(orch.load_memory(self.path), self.recs)
         self.assertEqual(os.listdir(self.d), ["m.jsonl"])
+
+    def test_duplicate_key_is_refused_on_load(self):
+        orch.save_memory(self.recs, self.path)
+        self.assertEqual(orch.load_memory(self.path), self.recs)                     # positive control
+        with open(self.path, encoding="utf-8") as f:
+            lines = f.read().splitlines()
+        lines[1] = lines[1].replace("{", '{"signal": {"metric": 999}, ', 1)         # two values for "signal"
+        with open(self.path, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines) + "\n")
+        with self.assertRaises(ValueError):
+            orch.load_memory(self.path)
 
     def test_malformed_record_is_a_verdict(self):
         self.assertEqual(core.verify_chain(self.recs), (True, "PASS"))
