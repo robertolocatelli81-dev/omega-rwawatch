@@ -8,8 +8,8 @@ jobs:
       matrix:
         python-version: ["3.9", "3.11", "3.13"]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
       - name: The modules must import with no third-party package installed
@@ -31,8 +31,8 @@ jobs:
     # A mutation the suite does not catch is a guard nobody has tested — that is a failure here, not a warning.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
       - name: Every scripted mutation of a guard must make the suite fail
@@ -53,8 +53,8 @@ jobs:
       matrix:
         python-version: ["3.11", "3.13"]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install the evidence extra (omega-evidence from GitHub at the commit of v0.9.1; cryptography >= 48 for ML-DSA-65)
@@ -74,7 +74,7 @@ jobs:
   secrets:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: {fetch-depth: 0}
       - name: gitleaks (whole history, pinned binary, default rules, no allowlist)
         run: |
@@ -86,8 +86,8 @@ jobs:
     # omega-evidence from the index instead: a release that breaks the signed pack turns this repository red first.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
       - name: "This package + the newest omega-evidence from the index + cryptography >= 48 (ML-DSA-65)"
