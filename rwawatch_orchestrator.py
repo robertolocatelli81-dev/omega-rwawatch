@@ -184,7 +184,7 @@ def baseline(memory):
     """What each chain looked like the LAST time it was assessed, merged into one snapshot for the council.
 
     Comparing with the previous cycle alone let a chain that was not assessed for one cycle drop out of every
-    comparison: an upgrade and a 667x mint during a one-cycle outage came back QUIET (Gemini Pro review, 26/09/2026,
+    comparison: an upgrade and a 667x mint during a one-cycle outage came back QUIET (independent review, 26/09/2026,
     reproduced). A chain never assessed keeps its latest unassessed record, so it is still reported as such."""
     snaps = [r["snapshot"] for r in memory if r.get("snapshot")]
     if not snaps:

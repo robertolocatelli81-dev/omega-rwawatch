@@ -513,7 +513,7 @@ class TestDiamondStellarMultiToken(unittest.TestCase):
 
 
 class TestBaselineAcrossOutage(unittest.TestCase):
-    """26/09 Gemini Pro review, reproduced: a chain not assessed for ONE cycle dropped out of the comparison, so an
+    """26/09 independent review, reproduced: a chain not assessed for ONE cycle dropped out of the comparison, so an
     upgrade plus a 667x mint during the outage came back QUIET, with the false sentence 'implementation code unchanged'.
     The council must compare each chain with the last cycle in which THAT chain was assessed."""
     def test_change_during_an_outage_is_flagged_on_recovery(self):
