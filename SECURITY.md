@@ -33,13 +33,13 @@ Report issues in those to their operators or maintainers.
 
 ## Data
 
-The watcher reads **public** on-chain state only (token names, symbols, decimals, total supplies,
+The watcher reads **public** on-chain state only (token names, symbols, decimals, total supplies, control holders, multisig members and thresholds, timelock delays,
 contract code, owner addresses, explorer search results) and records hashes and readings. No personal
 data is collected or processed. The optional signing seed and ML-DSA key live outside the repository
 (`~/.config/omega-rwawatch/`, mode 0600) and are never written into it; the production memory, the
 latest record and the evidence packs are gitignored.
 
-## Honest scope
+## Scope
 
 This project verifies and records public on-chain facts at a recorded block and the integrity of its
 own memory. It does not value, rate or forecast any fund, is not an official NAV, price or

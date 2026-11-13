@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "omega-rwawatch"
-version = "0.2.0"
-description = "Hash-chained on-chain readings of tokenized money-market / treasury fund tokens (BUIDL, JLTXX, MONY, BENJI, USYC) on ten public chains, with a node-identity, freshness and positive-control gate per chain and a deterministic council. Verify != predict; not a NAV/AUM feed."
+version = "0.3.0"
+description = "Hash-chained record of who controls tokenized fund and ETF tokens (BUIDL, JLTXX, MONY, BENJI, USYC; bCSPX, bIB01, SPYx, IBITon) on ten public chains: owner, upgrade, mint, freeze, seize and pause powers, multisig members and thresholds, timelock delays, read at a recorded block with a node-identity, freshness and positive-control gate per chain; a deterministic council flags every change. Not a NAV/AUM feed."
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "BSL-1.1" }

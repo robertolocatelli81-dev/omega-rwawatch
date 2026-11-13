@@ -16,11 +16,13 @@ NOT ASSESSED, never as clean.
 Independent project, not affiliated with, reviewed or endorsed by BlackRock, Securitize, J.P. Morgan, Franklin
 Templeton or Circle; not an official NAV/price/AUM feed; not financial advice.
 
-Honest scope: this VERIFIES and RECORDS public on-chain facts at a block and tracks them over time (the hash-chained
+Scope: this VERIFIES and RECORDS public on-chain facts at a block and tracks them over time (the hash-chained
 memory IS the record). It does NOT predict, it does not value any fund, and a total supply is not assets under
 management. Every address comes from the issuer's own page (provenance recorded per entry in REGISTRY /
-NONEVM_REGISTRY); the one exception is BUIDL on BNB Chain, which is not on BlackRock's page and is tied to the listed
-contracts by a shared owner(). Stdlib only; the hash-chain is VENDORED (never imports from ~/omega/).
+NONEVM_REGISTRY). BUIDL on BNB Chain was first tied to the listed contracts by a shared owner() (25/09/2026, when the
+page did not list it); BlackRock's page lists it since (raw HTML read 13/11/2026). Each token also carries a control
+record (spec/control-record.md): who can own, upgrade, mint, freeze, seize and pause it, and under which guard.
+Stdlib only; the hash-chain is VENDORED (never imports from ~/omega/).
 
 Run:  python3 rwawatch.py            # one snapshot, printed, not saved
 """
@@ -80,8 +82,9 @@ FUND_SEARCH = {
 SECURITIZE_SHAPES = ({"proxy_code_bytes": 703, "implementation_slot": "slot1"},
                      {"proxy_code_bytes": 170, "implementation_slot": "eip1967"})
 
-# Official source of the addresses (checked 25/09/2026, page sha256 a0c2c276…): it lists 6 of the 7 EVM addresses below,
-# and the Solana and Aptos ones; not BNB Chain.
+# Official source of the addresses (checked 25/09/2026, page sha256 a0c2c276…: 6 of the 7 EVM addresses below, Solana and
+# Aptos, not BNB Chain; re-read 13/11/2026, raw HTML sha256 30c6a732…: BNB Chain listed too, with the address below, and a
+# Tempo address, a chain not read here).
 OFFICIAL_PAGE = "https://www.blackrock.com/corporate/compliance/scams-and-fraud/blackrock-token-addresses"
 OFFICIAL = f"listed on {OFFICIAL_PAGE}"
 # owner() of all seven registered contracts on 25/09/2026, BNB included: one externally owned account (no code), i.e.
@@ -120,8 +123,9 @@ REGISTRY = [
                    "the only address in it); found first by owner() in this watcher's search, 25/09/2026",
      "expected_owner": "0x5ae5d4ada523985dbab22cf046599979897c8418"},
     {"chain": "bsc", "token": "BUIDL", "address": "0x2D5BdC96D9C8AabBDB38c9A27398513e7E5ef84F",
-     "provenance": "NOT on the official page (25/09/2026); BscScan search (is_checked, website securitize.io/blackrock/BUIDL) "
-                   "and owner() equal to the owner of the six officially listed contracts"},
+     "provenance": f"{OFFICIAL} since a date between 25/09/2026 (not listed then) and 13/11/2026 (listed, raw HTML sha256 "
+                   "30c6a732…); first tied by BscScan search (is_checked, website securitize.io/blackrock/BUIDL) and "
+                   "owner() equal to the owner of the six officially listed contracts"},
 ] + [
     # Franklin Templeton BENJI (FOBXX): no owner() on these contracts and an empty EIP-1967 admin slot (25/09/2026) —
     # control sits in Franklin's own modules, not watched here; expected_owner None = no owner check, said, not faked

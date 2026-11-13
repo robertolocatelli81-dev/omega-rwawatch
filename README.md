@@ -1,9 +1,39 @@
 # OMEGA-RWAWatch
 
-> Independent project, not affiliated with, reviewed or endorsed by BlackRock, Securitize, J.P. Morgan, Franklin
-> Templeton, Circle, Backed Assets, Ondo or State Street. It reads public on-chain data only. It is **not** an official
-> NAV, price or assets-under-management feed: a total supply is not a fund's assets, nor an ETF's NAV. Issuers,
-> funds and ETFs are named only to identify the contracts read.
+**Who can mint, freeze, seize, pause or upgrade a tokenized fund you hold — and did that change since yesterday?**
+
+A tokenized money-market fund or ETF lives in a contract somebody else controls. In the incidents below the losses came
+through those controls, not through a bug in the token code: on 24/05/2026 the multisig that is the StablR tokens' `owner()` got a new
+owner list while `owner()` itself stayed the same; on 11/09/2026 the multisig behind SILV's freeze authority and permanent
+delegate (one address holding both) was compromised; in March 2025 Zoth's proxy got a new implementation. Where a
+lender checks this, it is by hand and once: LlamaRisk's assessment of HINC for Aave Horizon (15/09/2026) made a missing
+on-chain timelock a blocking condition. Banks holding tokenized assets are asked to assess them «on an ongoing
+basis» and to document it (Basel SCO60.20).
+
+OMEGA-RWAWatch keeps that check as a record: for each watched token, at a recorded block, **who holds each power and
+under which guard** — one key, a multisig with its members and threshold, a timelock with its delay — in a hash-chained
+memory anyone can recompute offline, and a council that raises the posture when any of it changes.
+
+## What it would have said (measured 13/11/2026, from public data)
+
+The four incidents above, rebuilt at the block before and after the change (`tests/vectors/`; three recorded from two
+public archive nodes that gave identical answers, SILV rebuilt from the multisig's public transactions with its end
+state equal to the account today), run through the council of 0.2.0 (`cfa5f39`) and of this version:
+
+| Incident | Change, at the block | 0.2.0 | 0.3.0 | What the record says |
+|---|---|---|---|---|
+| StablR USDR, 24/05/2026 | block 25161284 → 25161285 | QUIET | **ELEVATED** | `owner()` the same MultiSigWallet `0xf453…82f3`; its owners `0xc73f…`, `0xd4b6…` → plus `0xd467…6cd1`, threshold 1 |
+| SILV (Solana), 11/09/2026 | slot 446057370 → 446057560 | QUIET | **ELEVATED** | freeze authority and permanent delegate = Squads vault `FqFN…vzZ3`; its multisig (3 of 5) gains a member at 03:43 UTC |
+| Zoth, 21/03/2025 | block 22094139 → 22094140 | ELEVATED | ELEVATED | implementation of the proxy replaced; the upgrade gate is in code: `not_evaluated` |
+| HINC | block 26126964 → 26126965 | ELEVATED | ELEVATED | `owner()` from one key (no code) to a TimelockController, `getMinDelay()` = 43200 s |
+
+SILV: the theft transaction (02:23:33 UTC) was approved by members already in the multisig, so no state changed then;
+what the record sees is the multisig changing afterwards. A record of state shows changes of control, not their use.
+
+Also measured on 0.2.0 with the probe of 13/11/2026: a change of Solana freeze authority, of permanent delegate, and
+an ETF mint / freeze authority that is no longer the issuer's all came back `QUIET` (the ETF layer was written to the
+memory and read by no analyst). They are `ELEVATED` now. The specification of the record, written before the code, is
+`spec/control-record.md`.
 
 Records, on a hash-chained memory, what the contracts of five tokenized money-market / treasury funds report on ten
 chains, and — since 2026-09-28 — what the contracts of four tokenized ETF trackers (bCSPX, bIB01, SPYx, IBITon) report
@@ -18,6 +48,25 @@ A total supply is a token count: not a fund's assets, not an ETF's NAV.
 | JLTXX, MONY | J.P. Morgan Asset Management | Ethereum (EIP-2535 Diamonds) |
 | BENJI | Franklin Templeton (FOBXX) | Ethereum, Polygon, Arbitrum, Avalanche, Base, Solana, Aptos, Stellar |
 | USYC | Circle | Ethereum, BNB, Solana |
+
+## The first control record of the watched tokens (13/11/2026, 16:0x CET, not written to the memory)
+
+One full snapshot with this version, all ten chains of the fund layer and the four of the ETF layer assessed, 30 control
+records, 0 refused by the specification. Compared with the production memory's last cycle, the council said
+«first control reading» for every token and raised nothing for it. What the records say:
+
+| Token(s) | Owner / admin | Its guard |
+|---|---|---|
+| BUIDL on 7 EVM chains, BUIDL-I | `owner()` `0xe016…b09e` | one key (no code) |
+| JLTXX, MONY (Diamonds) | `owner()` `0x5ae5…8418` | a contract whose `owner()` is one key; upgrade gate in code: not evaluated |
+| USYC (Ethereum, BNB) | `owner()` one key per chain | one key |
+| bCSPX, bIB01 (Ethereum, Base) | `owner()` | Safe, 2 of 3 |
+| IBITon (Ethereum, BNB) | sole `DEFAULT_ADMIN_ROLE`, also the beacon's `owner()` (upgrade) | TimelockController, `getMinDelay()` 7200 s |
+| BUIDL, BENJI, USYC on Solana | mint, freeze and seize (permanent delegate) on one address per token | a key or a program-derived address: not read further |
+| BENJI on EVM | `owner()` reverts: absent; upgrade gate in code | not evaluated |
+
+The same snapshot found BENJI's Stellar issuer with a signer set different from the one recorded on 25/09/2026
+(`ELEVATED`, as the production cycle of 13/11/2026 already said).
 
 ## Tokenized ETFs (added 2026-09-28)
 
@@ -92,8 +141,9 @@ For the five funds, every address comes from the issuer's own page, checked 25/0
 in `REGISTRY`), with one exception (the tokenized ETFs have their own provenance, stated in the section above):
 
 - **BUIDL** — [blackrock.com/…/blackrock-token-addresses](https://www.blackrock.com/corporate/compliance/scams-and-fraud/blackrock-token-addresses):
-  six of the seven EVM addresses, Solana and Aptos. The BNB Chain address is **not** on that page: it comes from
-  BscScan, and its `owner()` is the same externally owned account as the six listed contracts.
+  the seven EVM addresses, Solana and Aptos (raw HTML read 13/11/2026, sha256 `30c6a732…`). On 25/09/2026 the page did
+  not list BNB Chain: that address was first tied by BscScan and by an `owner()` equal to the six listed contracts'.
+  The page now also lists a Tempo address; Tempo is not read here.
 - **JLTXX** — J.P. Morgan Asset Management press release of 13/05/2026 (the only address in it).
 - **MONY** — found by this watcher: the search under JLTXX's terms returned a token owned by the key recorded for
   JLTXX; J.P. Morgan's press release of 15/12/2025 lists that address, and only that one.
@@ -172,8 +222,10 @@ python -m omega_evidence evidence/<pack>.json --ledger evidence/rwawatch_evidenc
 ```bash
 python3 rwawatch.py                 # one snapshot, printed, not saved
 python3 rwawatch_orchestrator.py    # one cycle, appended to the memory (+ signed pack if omega-evidence is installed)
-python3 tests/test_rwawatch.py      # 63 tests, no network, no wall clock; every write sandboxed
-mkdir -p /tmp/abl/home && python3 tools/ablate_guards.py /tmp/abl   # 33 scripted mutations of the guards: each must turn the suite red
+python3 tests/test_rwawatch.py      # 95 tests, no network, no wall clock; every write sandboxed
+mkdir -p /tmp/abl/home && python3 tools/ablate_guards.py /tmp/abl   # 72 scripted mutations of the guards: each must turn the suite red
+python3 tools/spec_orphans.py       # every clause of spec/control-record.md has a test; keys and vocabularies match the code
+python3 tools/record_vectors.py     # network: re-record the EVM incident vectors from two public archive nodes
 ```
 
 The watcher needs nothing beyond the standard library: Ed25519 and ML-DSA-65 are not in it, so the signed evidence
@@ -232,6 +284,21 @@ Aptos 2/2, Stellar supply and signer set identical. The test suite is checked by
 The cycle's pack verified `PASS`, `pq_protected`, with the Python verifier and with the Node one (`oeverify.mjs`); the
 same pack with one digit of the body changed fails `pack-sha3`. A cycle with discovery takes about 8 minutes.
 
-> **Honest scope.** It VERIFIES and RECORDS public on-chain facts at a block and tracks them over time. It does **not**
-> predict, value, or rate any fund; it does not tell an imitation from a wrapper. The hash-chain is vendored; this
-> project never imports from or writes into `~/omega/`.
+## Guarantees and assumptions
+
+- It reads public on-chain state at a recorded block and keeps it; it does not predict, value, price or rate any fund
+  or ETF, and a total supply is a token count, not assets under management nor NAV.
+- A power is `present`, `absent` or `not_evaluated` with its reason; never `absent` because it could not be read. On EVM
+  no standard interface enumerates who can mint, freeze, seize or pause: those powers are `not_evaluated`, and an
+  upgrade gate kept in code (UUPS, Diamond, custom proxies) is `not_evaluated` too.
+- A holder with no code is one key on chain, not one person; a multisig's members are keys, not people. A Solana vault
+  is read through its Squads multisig only where the registry declares it and the vault derives from it.
+- It records control state, not its use: a key that acts without changing any control (as at SILV's 02:23 UTC
+  transaction) changes nothing here.
+- Same-named tokens: it does not tell an imitation from a wrapper. The explorer search covers the chains where an
+  explorer answers; on 13/11/2026 Arbitrum and Polygon's Blockscout refused every query (HTTP 403), and Avalanche and
+  Base have no search configured: «not searched», said per cycle.
+- Not affiliated with, reviewed or endorsed by BlackRock, Securitize, J.P. Morgan, Franklin Templeton, Circle, Backed
+  Assets, Ondo, State Street, StablR, Dominion, Zoth or Neuberger Berman; issuers, funds and ETFs are named only to
+  identify the contracts read. Not financial advice.
+- The hash-chain is vendored; this project never imports from or writes into `~/omega/`.
