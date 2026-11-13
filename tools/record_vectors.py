@@ -28,11 +28,10 @@ OUT = os.path.join(ROOT, "tests", "vectors")
 VECTORS = {
     "stablr_usdr_20260524": {
         "incident": "StablR USDR / EURR, 23/05/2026 23:33 UTC (the issuer's statement dates the incident 24/05): the owner() of the token (a Gnosis MultiSigWallet) stayed the same "
-                    "while its owner list changed — an outside key added at block 25161285, the original two owners "
-                    "replaced in the following blocks; unbacked tokens minted after that",
+                    "while its owner list changed — a key that was not among its owners added at block 25161285, the original two owners "
+                    "replaced in the following blocks; the issuer statement of 25/05/2026 reports unauthorized access and a supply not fully backed 1:1",
         "sources": ["https://www.stablr.com/insights/stablr-discloses-cybersecurity-incident-affecting-usdr-and-eurr-token-operations "
                     "(issuer statement, 25/05/2026: unauthorized access, supply not fully backed 1:1)",
-                    "https://www.theblock.co/post/402429 (24/05/2026: multisig exploit, 13.5 M unbacked tokens; Blockaid's attribution)",
                     "eth.blockscout.com: transactions of 0xD4677B5A8B1b97EA213Fdb876b0FcBAB3f9F6CD1 to the multisig "
                     "0xF45392bd2D6e6b8C5Dc26BA6c8a12889419B82F3 from block 25161289"],
         "chain": "ethereum", "mode": "token",
@@ -45,7 +44,7 @@ VECTORS = {
     },
     "zoth_subvault_20250321": {
         "incident": "Zoth, 21/03/2025: the implementation behind the ERC1967Proxy USD0PPSubVault was replaced at block "
-                    "22094140 by the protocol's admin key, reported compromised (about 8.4 M USD lost)",
+                    "22094140 by the protocol's admin key; rekt.news, Halborn and QuillAudits report that key compromised and about 8.4 M USD lost",
         "sources": ["https://rekt.news/zoth-rekt", "https://www.halborn.com/blog/post/explained-the-zoth-hack-march-2025",
                     "https://quillaudits.com/blog/hack-analysis/zoth-loose-8.4m-dollar-due-to-access-control "
                     "(names the new implementation 0xc89d7894341e13d5067d003af5346b257d861f56)",

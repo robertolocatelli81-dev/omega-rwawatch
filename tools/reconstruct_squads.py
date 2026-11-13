@@ -174,8 +174,8 @@ def main():
     before = [e for e in events if e["slot"] < first_change["slot"]][-1]
     vector = {
         "name": "silv_squads_20260911",
-        "incident": "SILV (Dominion, tokenized silver, Solana), 11/09/2026: the issuer declared its multisig compromised "
-                    "at about 01:00 UTC; a vault transaction of the multisig behind the mint's freeze authority and "
+        "incident": "SILV (Dominion, tokenized silver, Solana), 11/09/2026: cryptoticker.io (13/09/2026) reports a multisig "
+                    "of the project compromised at about 01:00 UTC; a vault transaction of the multisig behind the mint's freeze authority and "
                     "permanent delegate executed at 02:23:33 UTC; the multisig's members changed from 03:43:48 UTC",
         "sources": ["https://cryptoticker.io/en/tokenized-assets-solana-freeze-authority-clawback-check/ (13/09/2026: "
                     "multisig compromised around 01:00 UTC on 11/09; freeze authority and permanent delegate on the same address)",
