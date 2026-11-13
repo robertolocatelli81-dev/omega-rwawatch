@@ -23,7 +23,7 @@ code equal the ones written here. Its count of orphans must be 0.
   assessed carries none (the chain says why it was not assessed).
 - **[CR-2]** `control.spec` is the string `rwawatch-control/1`. The council knows this version only; any other value is
   refused (§5, P6).
-- **[CR-3]** `control` has exactly the keys `spec`, `powers`, `holders`. Any other key is refused (P6).
+- **[CR-3]** A control record has exactly the keys `spec`, `powers`, `holders`. Any other key is refused (P6).
 
 ## 2. Powers
 
