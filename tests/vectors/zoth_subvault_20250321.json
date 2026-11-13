@@ -58,7 +58,7 @@
   ],
   "posture": "ELEVATED"
  },
- "incident": "Zoth, 21/03/2025: the implementation behind the ERC1967Proxy USD0PPSubVault was replaced at block 22094140 by the protocol's admin key, reported compromised (about 8.4 M USD lost)",
+ "incident": "Zoth, 21/03/2025: the implementation behind the ERC1967Proxy USD0PPSubVault was replaced at block 22094140 by the protocol's admin key; rekt.news, Halborn and QuillAudits report that key compromised and about 8.4 M USD lost",
  "mode": "contract",
  "name": "zoth_subvault_20250321",
  "nodes": [

@@ -2,10 +2,11 @@
 
 **Who can mint, freeze, seize, pause or upgrade a tokenized fund you hold — and did that change since yesterday?**
 
-A tokenized money-market fund or ETF lives in a contract somebody else controls. In three of the cases below the losses
-came through those controls, not through a bug in the token code: on 23/05/2026 at 23:33 UTC (block 25161285) the
-multisig that is the StablR tokens' `owner()` got a new owner list while `owner()` itself stayed the same; on 11/09/2026
-Dominion reported a compromised multisig wallet (cryptoticker.io, 13/09/2026), and the Squads multisig behind SILV's
+A tokenized money-market fund or ETF lives in a contract somebody else controls. Three of the cases below are incidents
+reported by the issuer or by the press (StablR's statement of 25/05/2026; cryptoticker.io on Dominion's SILV,
+13/09/2026; rekt.news and Halborn on Zoth). What changed on-chain, read at the block: on 23/05/2026 at 23:33 UTC (block 25161285) the
+multisig that is the StablR tokens' `owner()` got a new owner list while `owner()` itself stayed the same; on 11/09/2026,
+the day cryptoticker.io reports a project multisig wallet compromised, the Squads multisig behind SILV's
 freeze authority and permanent delegate (one address holding both) changed its members from 03:43 UTC; on 21/03/2025
 Zoth's proxy got a new implementation. The fourth case is not an incident: LlamaRisk's assessment of HINC for Aave
 Horizon (15/09/2026) made an on-chain timelock on the address that controls the token a prerequisite, to be verified
@@ -30,7 +31,7 @@ its end state equal to the account today), run through the council of 0.2.0 (`cf
 | HINC, 05/10/2026 (not an incident) | block 26126964 → 26126965 | ELEVATED | ELEVATED | `owner()` from one key (no code) to a TimelockController, `getMinDelay()` = 43200 s |
 
 SILV: at 02:23:33 UTC a vault transaction of that multisig, approved by three members already in it, moved 5 SOL out
-of the vault (`3V2U6E2f…`); no control state changed then, and which transactions of that night were the attacker's is
+of the vault (`3V2U6E2f…`); no control state changed then, and which transactions of that night were unauthorized is
 not established here. What the record sees is the multisig changing its members from 03:43 UTC. A record of state
 shows changes of control, not their use.
 

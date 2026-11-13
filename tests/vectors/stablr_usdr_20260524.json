@@ -132,7 +132,7 @@
   ],
   "posture": "ELEVATED"
  },
- "incident": "StablR USDR / EURR, 23/05/2026 23:33 UTC (the issuer's statement dates the incident 24/05): the owner() of the token (a Gnosis MultiSigWallet) stayed the same while its owner list changed \u2014 an outside key added at block 25161285, the original two owners replaced in the following blocks; unbacked tokens minted after that",
+ "incident": "StablR USDR / EURR, 23/05/2026 23:33 UTC (the issuer's statement dates the incident 24/05): the owner() of the token (a Gnosis MultiSigWallet) stayed the same while its owner list changed \u2014 a key that was not among its owners added at block 25161285, the original two owners replaced in the following blocks; the issuer statement of 25/05/2026 reports unauthorized access and a supply not fully backed 1:1",
  "mode": "token",
  "name": "stablr_usdr_20260524",
  "nodes": [

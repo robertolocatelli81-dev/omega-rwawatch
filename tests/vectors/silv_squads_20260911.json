@@ -34,7 +34,7 @@
   ],
   "posture": "ELEVATED"
  },
- "incident": "SILV (Dominion, tokenized silver, Solana), 11/09/2026: the issuer declared its multisig compromised at about 01:00 UTC; a vault transaction of the multisig behind the mint's freeze authority and permanent delegate executed at 02:23:33 UTC; the multisig's members changed from 03:43:48 UTC",
+ "incident": "SILV (Dominion, tokenized silver, Solana), 11/09/2026: cryptoticker.io (13/09/2026) reports a multisig of the project compromised at about 01:00 UTC; a vault transaction of the multisig behind the mint's freeze authority and permanent delegate executed at 02:23:33 UTC; the multisig's members changed from 03:43:48 UTC",
  "mint": "SiLVFMgD3eD2rgK628NbTBq9MnuJF5FW2CRaVyTB35L",
  "mint_account_today": {
   "context": {
