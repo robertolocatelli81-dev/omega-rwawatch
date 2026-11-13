@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.0 — unreleased — the control record: who can act on each token, under which guard, and every change of it
+## 0.3.0 — 2026-11-13 — the control record: who can act on each token, under which guard, and every change of it
 
 - **Control record** (`spec/control-record.md`, `rwawatch-control/1`, written before the code). Every token of an
   assessed chain, in the fund layer and in the ETF layer, records six powers — owner, upgrade, mint, freeze, seize,
