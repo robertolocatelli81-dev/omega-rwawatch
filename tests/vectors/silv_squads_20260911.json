@@ -1,0 +1,806 @@
+{
+ "chain": "solana",
+ "configs": {
+  "after": {
+   "members": [
+    "2Lp91FyJUb8MQ1yteFLKh345Umb5f1RgCCwwDFNCYEcD",
+    "2ZqTm9ytxsEByJWzD55bePdNyqgwgGB5SqdaP7uJhU2k",
+    "8kTSi3vk54oHDeMrSY4r7kGqS23MLCnCHd6aJHHQWmpM",
+    "EHQZBu5y3G8Lo5Vb2HH48DRjtajdzJwX499Cs9E8mSfY",
+    "EHVcpEgD8JsP4MfKR9tBz6NXk8jymHuRNouEsJuyKGux",
+    "EkDhR65JUL8tGhxRhnueaqri6zNzxMEJ82UU35pQ7V56"
+   ],
+   "slot": 446057560,
+   "threshold": 3,
+   "time_lock_s": 0
+  },
+  "before": {
+   "members": [
+    "2Lp91FyJUb8MQ1yteFLKh345Umb5f1RgCCwwDFNCYEcD",
+    "2ZqTm9ytxsEByJWzD55bePdNyqgwgGB5SqdaP7uJhU2k",
+    "8kTSi3vk54oHDeMrSY4r7kGqS23MLCnCHd6aJHHQWmpM",
+    "EHVcpEgD8JsP4MfKR9tBz6NXk8jymHuRNouEsJuyKGux",
+    "EkDhR65JUL8tGhxRhnueaqri6zNzxMEJ82UU35pQ7V56"
+   ],
+   "slot": 446057370,
+   "threshold": 3,
+   "time_lock_s": 0
+  }
+ },
+ "expect": {
+  "agent": "_agent_control",
+  "contains": [
+   "members"
+  ],
+  "posture": "ELEVATED"
+ },
+ "incident": "SILV (Dominion, tokenized silver, Solana), 11/09/2026: the issuer declared its multisig compromised at about 01:00 UTC; a vault transaction of the multisig behind the mint's freeze authority and permanent delegate executed at 02:23:33 UTC; the multisig's members changed from 03:43:48 UTC",
+ "mint": "SiLVFMgD3eD2rgK628NbTBq9MnuJF5FW2CRaVyTB35L",
+ "mint_account_today": {
+  "context": {
+   "apiVersion": "4.4.0",
+   "slot": 468967803
+  },
+  "value": {
+   "data": {
+    "parsed": {
+     "info": {
+      "decimals": 6,
+      "extensions": [
+       {
+        "extension": "permanentDelegate",
+        "state": {
+         "delegate": "FqFNXCMeEYUD64tLPhvVzBAnovfYBAGsU8d6qdLnvzZ3"
+        }
+       },
+       {
+        "extension": "metadataPointer",
+        "state": {
+         "authority": "Ct1uXir1Wkjf5eUJ9ZFiZRbhKAwRKGSsw22vVyWHXGMH",
+         "metadataAddress": "SiLVFMgD3eD2rgK628NbTBq9MnuJF5FW2CRaVyTB35L"
+        }
+       },
+       {
+        "extension": "tokenMetadata",
+        "state": {
+         "additionalMetadata": [],
+         "mint": "SiLVFMgD3eD2rgK628NbTBq9MnuJF5FW2CRaVyTB35L",
+         "name": "Dominion Silver",
+         "symbol": "SILV",
+         "updateAuthority": "Ct1uXir1Wkjf5eUJ9ZFiZRbhKAwRKGSsw22vVyWHXGMH",
+         "uri": "https://app.dominion.market/silv-metadata.json"
+        }
+       }
+      ],
+      "freezeAuthority": "FqFNXCMeEYUD64tLPhvVzBAnovfYBAGsU8d6qdLnvzZ3",
+      "isInitialized": true,
+      "mintAuthority": "6FtT3CBaXVArhd2C4egCsQb1f1NF3FAfA6xhXJXD8chR",
+      "supply": "70328958676"
+     },
+     "type": "mint"
+    },
+    "program": "spl-token-2022",
+    "space": 419
+   },
+   "executable": false,
+   "lamports": 3807120,
+   "owner": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+   "rentEpoch": 18446744073709551615,
+   "space": 419
+  }
+ },
+ "multisig": "BjbtdEcy324Xdmt9182D8FZYGiH2nhTLFHP7EaAEXLAi",
+ "multisig_account_today_base64": "4HR5ukShT+yDcfhQOLzx1FquA8d5l5LU0oeNvVb+csCebfkIVqweEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAwAAAAAATgAAAAAAAABKAAAAAAAAAAHcX77FPAT//CsBRc7/upYL215UMaiX9ARDVXUhz3Q/PvsHAAAACpiBTo7+VVZhRCje5fWDst7ZWaYxHrL5lCm/VMxKwfwHEqVn4GkdIh0SQzKl55MPf2MggXot0j0/E4HZ1AkG6XgHE+8Fe2SWIEKBmlHFU4aaBTislfoKqEN+o+r7TfZJzvYHF0URe/1wc4QQ03LCP4rSrdrca4x50jwYXldNFgkDuYEHH9dqCkjX+PWA35Ksiu5MmHzeDYNPWmxFhaUiEvlCHlgHJyH3fvNAAjTFM+OhpMGqdDxy8bRuDvaY/ChAZxC1HoQHNb+V2+qDNl1qpk2tL4r/KHQZPVjb99DXquB4qDYuJWYHAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+ "multisig_account_today_slot": 468967802,
+ "name": "silv_squads_20260911",
+ "recorded_utc": "2026-11-13T14:56:58+00:00",
+ "replay": {
+  "end_state_equals_account_today": true,
+  "events": [
+   {
+    "actions": null,
+    "block_time": 1784627022,
+    "instruction": "multisig_create_v2",
+    "signature": "3vwBBJ7XtPCpeq27KPWWwNSwSRMG9vRgQPrgRZq8Ysv6R82tWkg3uXvXWD7KDU1q6A4wrpuSZpeyaAzXtYv8iiqr",
+    "slot": 434280002,
+    "state": {
+     "members": [
+      "8kTSi3vk54oHDeMrSY4r7kGqS23MLCnCHd6aJHHQWmpM",
+      "EkDhR65JUL8tGhxRhnueaqri6zNzxMEJ82UU35pQ7V56"
+     ],
+     "threshold": 1,
+     "time_lock_s": 0
+    }
+   },
+   {
+    "actions": null,
+    "block_time": 1784627079,
+    "instruction": "config_transaction_create",
+    "signature": "43pSzqfPT838xAJLU1hFVk3Ekh1fkfMQcz4eo9dCCs2jXNsfcUfrdiqGNAvuLtjBYRYwM4hVN25kcs6Q3RNYg1XP",
+    "slot": 434280141,
+    "state": {
+     "members": [
+      "8kTSi3vk54oHDeMrSY4r7kGqS23MLCnCHd6aJHHQWmpM",
+      "EkDhR65JUL8tGhxRhnueaqri6zNzxMEJ82UU35pQ7V56"
+     ],
+     "threshold": 1,
+     "time_lock_s": 0
+    }
+   },
+   {
+    "actions": null,
+    "block_time": 1784627117,
+    "instruction": "config_transaction_create",
+    "signature": "5wqAKW15Z72qcq5KgYB5weQ4Dwf3P3AKpXbSem5cR6Ad5uzH9qLqsZsz3y38A4Hfju7AohPEVz3GWCEneZGV1REQ",
+    "slot": 434280229,
+    "state": {
+     "members": [
+      "8kTSi3vk54oHDeMrSY4r7kGqS23MLCnCHd6aJHHQWmpM",
+      "EkDhR65JUL8tGhxRhnueaqri6zNzxMEJ82UU35pQ7V56"
+     ],
+     "threshold": 1,
+     "time_lock_s": 0
+    }
+   },
+   {
+    "actions": null,
+    "block_time": 1784627173,
+    "instruction": "config_transaction_create",
+    "signature": "62g6Ap6bRu9yMqLiTAxJMuxmHZ8Qy6gCKuQHe67UhPU8HpYxKsVP7DMrRYLV53Pvb6EVa5Ybi7rkVZnHwgkdLDaA",
+    "slot": 434280360,
+    "state": {
+     "members": [
+      "8kTSi3vk54oHDeMrSY4r7kGqS23MLCnCHd6aJHHQWmpM",
+      "EkDhR65JUL8tGhxRhnueaqri6zNzxMEJ82UU35pQ7V56"
+     ],
+     "threshold": 1,
+     "time_lock_s": 0
+    }
+   },
+   {
+    "actions": [
+     [
+      "AddMember",
+      "2ZqTm9ytxsEByJWzD55bePdNyqgwgGB5SqdaP7uJhU2k"
+     ]
+    ],
+    "block_time": 1784627201,
+    "instruction": "config_transaction_execute",
+    "signature": "61BxB6YV16zCr3iKMLPKV3bHxRqn4B9SiHYnQ7Mv2YJApm9hgdzQ9Ks1KD9GgAS77mCX5UkghBgj18Sw7UDEVesE",
+    "slot": 434280428,
+    "state": {
+     "members": [
+      "2ZqTm9ytxsEByJWzD55bePdNyqgwgGB5SqdaP7uJhU2k",
+      "8kTSi3vk54oHDeMrSY4r7kGqS23MLCnCHd6aJHHQWmpM",
+      "EkDhR65JUL8tGhxRhnueaqri6zNzxMEJ82UU35pQ7V56"
+     ],
+     "threshold": 1,
+     "time_lock_s": 0
+    }
+   },
+   {
+    "actions": null,
+    "block_time": 1784627253,
+    "instruction": "config_transaction_create",
+    "signature": "473PXKuupH35FSnWjHKEggevFYQErVcvivsMpDrkf2oKggn3VfLV9a8jNNdAuuu2sbHnNipfKUrkrw2xtrSN6X6y",
+    "slot": 434280554,
+    "state": {
+     "members": [
+      "2ZqTm9ytxsEByJWzD55bePdNyqgwgGB5SqdaP7uJhU2k",
+      "8kTSi3vk54oHDeMrSY4r7kGqS23MLCnCHd6aJHHQWmpM",
+      "EkDhR65JUL8tGhxRhnueaqri6zNzxMEJ82UU35pQ7V56"
+     ],
+     "threshold": 1,
+     "time_lock_s": 0
+    }
+   },
+   {
+    "actions": null,
+    "block_time": 1784627291,
+    "instruction": "config_transaction_create",
+    "signature": "48GJeobL4iwji78kmAU3tZTmtKonk8Nvkeb8eDiHmdsz9o81hN8g5oFB2iTFpPj8TN2fHMUHwsR7Fok3QF5uEqZy",
+    "slot": 434280644,
+    "state": {
+     "members": [
+      "2ZqTm9ytxsEByJWzD55bePdNyqgwgGB5SqdaP7uJhU2k",
+      "8kTSi3vk54oHDeMrSY4r7kGqS23MLCnCHd6aJHHQWmpM",
+      "EkDhR65JUL8tGhxRhnueaqri6zNzxMEJ82UU35pQ7V56"
+     ],
+     "threshold": 1,
+     "time_lock_s": 0
+    }
+   },
+   {
+    "actions": [
+     [
+      "AddMember",
+      "EHVcpEgD8JsP4MfKR9tBz6NXk8jymHuRNouEsJuyKGux"
+     ]
+    ],
+    "block_time": 1784627306,
+    "instruction": "config_transaction_execute",
+    "signature": "J2uC4ofLgWAXXaDDYcNJvgTYA5yowQrnwUUDrpDoNnzFJ6rgG361RAYoMKTY4ZrdnM8oJBGHYctyix6NuKJsRES",
+    "slot": 434280677,
+    "state": {
+     "members": [
+      "2ZqTm9ytxsEByJWzD55bePdNyqgwgGB5SqdaP7uJhU2k",
+      "8kTSi3vk54oHDeMrSY4r7kGqS23MLCnCHd6aJHHQWmpM",
+      "EHVcpEgD8JsP4MfKR9tBz6NXk8jymHuRNouEsJuyKGux",
+      "EkDhR65JUL8tGhxRhnueaqri6zNzxMEJ82UU35pQ7V56"
+     ],
+     "threshold": 1,
+     "time_lock_s": 0
+    }
+   },
+   {
+    "actions": null,
+    "block_time": 1784627334,
+    "instruction": "config_transaction_create",
+    "signature": "4ir5KvvCjn8sN8KWLH1QgH2HhtY9jKrxjKsc58UCZgpbUvN5wtctSf3pEVk5Kjygv7B9FgyM2Eh8VC1z5h5FPeuy",
+    "slot": 434280742,
+    "state": {
+     "members": [
+      "2ZqTm9ytxsEByJWzD55bePdNyqgwgGB5SqdaP7uJhU2k",
+      "8kTSi3vk54oHDeMrSY4r7kGqS23MLCnCHd6aJHHQWmpM",
+      "EHVcpEgD8JsP4MfKR9tBz6NXk8jymHuRNouEsJuyKGux",
+      "EkDhR65JUL8tGhxRhnueaqri6zNzxMEJ82UU35pQ7V56"
+     ],
+     "threshold": 1,
+     "time_lock_s": 0
+    }
+   },
+   {
+    "actions": [
+     [
+      "AddMember",
+      "2Lp91FyJUb8MQ1yteFLKh345Umb5f1RgCCwwDFNCYEcD"
+     ]
+    ],
+    "block_time": 1784627355,
+    "instruction": "config_transaction_execute",
+    "signature": "RqR6repLPs4NoMtUmamyaoHKWhuuty8qUfas9QRuAwJiiEJSeR7jGpFyfFPdU5V3JJGfPiC63191iEGtjLPBsAc",
+    "slot": 434280793,
+    "state": {
+     "members": [
+      "2Lp91FyJUb8MQ1yteFLKh345Umb5f1RgCCwwDFNCYEcD",
+      "2ZqTm9ytxsEByJWzD55bePdNyqgwgGB5SqdaP7uJhU2k",
+      "8kTSi3vk54oHDeMrSY4r7kGqS23MLCnCHd6aJHHQWmpM",
+      "EHVcpEgD8JsP4MfKR9tBz6NXk8jymHuRNouEsJuyKGux",
+      "EkDhR65JUL8tGhxRhnueaqri6zNzxMEJ82UU35pQ7V56"
+     ],
+     "threshold": 1,
+     "time_lock_s": 0
+    }
+   },
+   {
+    "actions": null,
+    "block_time": 1784627563,
+    "instruction": "config_transaction_create",
+    "signature": "kf5ntJK46GroHL1N7yvLBveC94YrKTzcfTxPmuXSULQEUtRw8HyEX8XSYnv4XXxR5nYBgnhgwpi7xbqSfHPWiLD",
+    "slot": 434281279,
+    "state": {
+     "members": [
+      "2Lp91FyJUb8MQ1yteFLKh345Umb5f1RgCCwwDFNCYEcD",
+      "2ZqTm9ytxsEByJWzD55bePdNyqgwgGB5SqdaP7uJhU2k",
+      "8kTSi3vk54oHDeMrSY4r7kGqS23MLCnCHd6aJHHQWmpM",
+      "EHVcpEgD8JsP4MfKR9tBz6NXk8jymHuRNouEsJuyKGux",
+      "EkDhR65JUL8tGhxRhnueaqri6zNzxMEJ82UU35pQ7V56"
+     ],
+     "threshold": 1,
+     "time_lock_s": 0
+    }
+   },
+   {
+    "actions": null,
+    "block_time": 1784628999,
+    "instruction": "config_transaction_create",
+    "signature": "3KtQPppuj19LDFziCvKTdbCFNxJVDkciTgzKwZRvaqwHSGsJmbT8F3Ww3riSGeGDs1jwZrRaCgTmGWAbuy8vd9tG",
+    "slot": 434284702,
+    "state": {
+     "members": [
+      "2Lp91FyJUb8MQ1yteFLKh345Umb5f1RgCCwwDFNCYEcD",
+      "2ZqTm9ytxsEByJWzD55bePdNyqgwgGB5SqdaP7uJhU2k",
+      "8kTSi3vk54oHDeMrSY4r7kGqS23MLCnCHd6aJHHQWmpM",
+      "EHVcpEgD8JsP4MfKR9tBz6NXk8jymHuRNouEsJuyKGux",
+      "EkDhR65JUL8tGhxRhnueaqri6zNzxMEJ82UU35pQ7V56"
+     ],
+     "threshold": 1,
+     "time_lock_s": 0
+    }
+   },
+   {
+    "actions": [
+     [
+      "ChangeThreshold",
+      3
+     ]
+    ],
+    "block_time": 1784629045,
+    "instruction": "config_transaction_execute",
+    "signature": "5JfchnGuAmDv5y6S62Evo2nn6hsHT1eaYWXzGAz5YhRzgMtRLCPagM5H8dYRg6XWRHujbBwqKQ3gjr6agqhwieeb",
+    "slot": 434284815,
+    "state": {
+     "members": [
+      "2Lp91FyJUb8MQ1yteFLKh345Umb5f1RgCCwwDFNCYEcD",
+      "2ZqTm9ytxsEByJWzD55bePdNyqgwgGB5SqdaP7uJhU2k",
+      "8kTSi3vk54oHDeMrSY4r7kGqS23MLCnCHd6aJHHQWmpM",
+      "EHVcpEgD8JsP4MfKR9tBz6NXk8jymHuRNouEsJuyKGux",
+      "EkDhR65JUL8tGhxRhnueaqri6zNzxMEJ82UU35pQ7V56"
+     ],
+     "threshold": 3,
+     "time_lock_s": 0
+    }
+   },
+   {
+    "actions": null,
+    "block_time": 1789098166,
+    "instruction": "config_transaction_create",
+    "signature": "4XV28QHZwJT9iVbnR8qjLxMtyZUWhnmctkt2DrPWqkwNFzVEBGWADtuakAaSjiW88ErKfPwsxijtPA9TUZLnQVUs",
+    "slot": 446057370,
+    "state": {
+     "members": [
+      "2Lp91FyJUb8MQ1yteFLKh345Umb5f1RgCCwwDFNCYEcD",
+      "2ZqTm9ytxsEByJWzD55bePdNyqgwgGB5SqdaP7uJhU2k",
+      "8kTSi3vk54oHDeMrSY4r7kGqS23MLCnCHd6aJHHQWmpM",
+      "EHVcpEgD8JsP4MfKR9tBz6NXk8jymHuRNouEsJuyKGux",
+      "EkDhR65JUL8tGhxRhnueaqri6zNzxMEJ82UU35pQ7V56"
+     ],
+     "threshold": 3,
+     "time_lock_s": 0
+    }
+   },
+   {
+    "actions": [
+     [
+      "AddMember",
+      "EHQZBu5y3G8Lo5Vb2HH48DRjtajdzJwX499Cs9E8mSfY"
+     ]
+    ],
+    "block_time": 1789098228,
+    "instruction": "config_transaction_execute",
+    "signature": "2FgdPAikXS3zE8GTt3VjsYYj8btx5wfPWJCxfdXW6SUwToZMh3BfVhKt17unF2uTUcu4iQ1ipFP7FA5aBR5rzyxs",
+    "slot": 446057560,
+    "state": {
+     "members": [
+      "2Lp91FyJUb8MQ1yteFLKh345Umb5f1RgCCwwDFNCYEcD",
+      "2ZqTm9ytxsEByJWzD55bePdNyqgwgGB5SqdaP7uJhU2k",
+      "8kTSi3vk54oHDeMrSY4r7kGqS23MLCnCHd6aJHHQWmpM",
+      "EHQZBu5y3G8Lo5Vb2HH48DRjtajdzJwX499Cs9E8mSfY",
+      "EHVcpEgD8JsP4MfKR9tBz6NXk8jymHuRNouEsJuyKGux",
+      "EkDhR65JUL8tGhxRhnueaqri6zNzxMEJ82UU35pQ7V56"
+     ],
+     "threshold": 3,
+     "time_lock_s": 0
+    }
+   },
+   {
+    "actions": null,
+    "block_time": 1789098332,
+    "instruction": "config_transaction_create",
+    "signature": "5U9tpyigPf9M7VLSHMzn2GYRURNuSB9snf6YBzLuR3sFPvNntVJymtNTYqJSWxrn1cA6meHTxxMqLNXiBPRDqSjz",
+    "slot": 446057886,
+    "state": {
+     "members": [
+      "2Lp91FyJUb8MQ1yteFLKh345Umb5f1RgCCwwDFNCYEcD",
+      "2ZqTm9ytxsEByJWzD55bePdNyqgwgGB5SqdaP7uJhU2k",
+      "8kTSi3vk54oHDeMrSY4r7kGqS23MLCnCHd6aJHHQWmpM",
+      "EHQZBu5y3G8Lo5Vb2HH48DRjtajdzJwX499Cs9E8mSfY",
+      "EHVcpEgD8JsP4MfKR9tBz6NXk8jymHuRNouEsJuyKGux",
+      "EkDhR65JUL8tGhxRhnueaqri6zNzxMEJ82UU35pQ7V56"
+     ],
+     "threshold": 3,
+     "time_lock_s": 0
+    }
+   },
+   {
+    "actions": null,
+    "block_time": 1789098447,
+    "instruction": "config_transaction_create",
+    "signature": "kmdmJL5WrnDr9TLyC6gvF6QpRhiULNmAzr1JBvVVmm7bcjbEGRzBhkkACm4ibLwPVV1VcLQkzJP2mv4WgmShppw",
+    "slot": 446058250,
+    "state": {
+     "members": [
+      "2Lp91FyJUb8MQ1yteFLKh345Umb5f1RgCCwwDFNCYEcD",
+      "2ZqTm9ytxsEByJWzD55bePdNyqgwgGB5SqdaP7uJhU2k",
+      "8kTSi3vk54oHDeMrSY4r7kGqS23MLCnCHd6aJHHQWmpM",
+      "EHQZBu5y3G8Lo5Vb2HH48DRjtajdzJwX499Cs9E8mSfY",
+      "EHVcpEgD8JsP4MfKR9tBz6NXk8jymHuRNouEsJuyKGux",
+      "EkDhR65JUL8tGhxRhnueaqri6zNzxMEJ82UU35pQ7V56"
+     ],
+     "threshold": 3,
+     "time_lock_s": 0
+    }
+   },
+   {
+    "actions": null,
+    "block_time": 1789104268,
+    "instruction": "config_transaction_create",
+    "signature": "63WTtEQMLqibstui15RnVC86Wi7F44NZqcvUKKbuYXtA86iVpJz9rUkShtqUfasrZ3d5wBrgComczpT4LPiKzhjz",
+    "slot": 446076644,
+    "state": {
+     "members": [
+      "2Lp91FyJUb8MQ1yteFLKh345Umb5f1RgCCwwDFNCYEcD",
+      "2ZqTm9ytxsEByJWzD55bePdNyqgwgGB5SqdaP7uJhU2k",
+      "8kTSi3vk54oHDeMrSY4r7kGqS23MLCnCHd6aJHHQWmpM",
+      "EHQZBu5y3G8Lo5Vb2HH48DRjtajdzJwX499Cs9E8mSfY",
+      "EHVcpEgD8JsP4MfKR9tBz6NXk8jymHuRNouEsJuyKGux",
+      "EkDhR65JUL8tGhxRhnueaqri6zNzxMEJ82UU35pQ7V56"
+     ],
+     "threshold": 3,
+     "time_lock_s": 0
+    }
+   },
+   {
+    "actions": [
+     [
+      "AddMember",
+      "iMxHnYidtLgmGx8mX4KfT4GRhzAZn3aFVY59qR3dF6b"
+     ]
+    ],
+    "block_time": 1789104452,
+    "instruction": "config_transaction_execute",
+    "signature": "3A9bMDMiSWHvu2PdkoAMjDRWwjM4dFWg3HeRLX3cKiptC9YPdfmRiDu9ph2ZKFcLYDcMMoHNZ1o5MyoCT84DnR28",
+    "slot": 446077227,
+    "state": {
+     "members": [
+      "2Lp91FyJUb8MQ1yteFLKh345Umb5f1RgCCwwDFNCYEcD",
+      "2ZqTm9ytxsEByJWzD55bePdNyqgwgGB5SqdaP7uJhU2k",
+      "8kTSi3vk54oHDeMrSY4r7kGqS23MLCnCHd6aJHHQWmpM",
+      "EHQZBu5y3G8Lo5Vb2HH48DRjtajdzJwX499Cs9E8mSfY",
+      "EHVcpEgD8JsP4MfKR9tBz6NXk8jymHuRNouEsJuyKGux",
+      "EkDhR65JUL8tGhxRhnueaqri6zNzxMEJ82UU35pQ7V56",
+      "iMxHnYidtLgmGx8mX4KfT4GRhzAZn3aFVY59qR3dF6b"
+     ],
+     "threshold": 3,
+     "time_lock_s": 0
+    }
+   },
+   {
+    "actions": null,
+    "block_time": 1789104476,
+    "instruction": "config_transaction_create",
+    "signature": "4MQWdyrsMFQEXKGKrWZWSMYnZ3ebt5oe1MCcSYTYcC8783umUV8ka9z1SkBRrwLCUhAwE79EF2W9ZQ7rNYpHrT5n",
+    "slot": 446077304,
+    "state": {
+     "members": [
+      "2Lp91FyJUb8MQ1yteFLKh345Umb5f1RgCCwwDFNCYEcD",
+      "2ZqTm9ytxsEByJWzD55bePdNyqgwgGB5SqdaP7uJhU2k",
+      "8kTSi3vk54oHDeMrSY4r7kGqS23MLCnCHd6aJHHQWmpM",
+      "EHQZBu5y3G8Lo5Vb2HH48DRjtajdzJwX499Cs9E8mSfY",
+      "EHVcpEgD8JsP4MfKR9tBz6NXk8jymHuRNouEsJuyKGux",
+      "EkDhR65JUL8tGhxRhnueaqri6zNzxMEJ82UU35pQ7V56",
+      "iMxHnYidtLgmGx8mX4KfT4GRhzAZn3aFVY59qR3dF6b"
+     ],
+     "threshold": 3,
+     "time_lock_s": 0
+    }
+   },
+   {
+    "actions": [
+     [
+      "RemoveMember",
+      "8kTSi3vk54oHDeMrSY4r7kGqS23MLCnCHd6aJHHQWmpM"
+     ]
+    ],
+    "block_time": 1789104531,
+    "instruction": "config_transaction_execute",
+    "signature": "5jaEbk5fN5t91mY5w2djqqXDt8SNzPmdiMvF4K6hG9BmzHKmkVA64TpusZT7upjPRuNH5zXbg4bkGBsx3Fd1UEEF",
+    "slot": 446077479,
+    "state": {
+     "members": [
+      "2Lp91FyJUb8MQ1yteFLKh345Umb5f1RgCCwwDFNCYEcD",
+      "2ZqTm9ytxsEByJWzD55bePdNyqgwgGB5SqdaP7uJhU2k",
+      "EHQZBu5y3G8Lo5Vb2HH48DRjtajdzJwX499Cs9E8mSfY",
+      "EHVcpEgD8JsP4MfKR9tBz6NXk8jymHuRNouEsJuyKGux",
+      "EkDhR65JUL8tGhxRhnueaqri6zNzxMEJ82UU35pQ7V56",
+      "iMxHnYidtLgmGx8mX4KfT4GRhzAZn3aFVY59qR3dF6b"
+     ],
+     "threshold": 3,
+     "time_lock_s": 0
+    }
+   },
+   {
+    "actions": null,
+    "block_time": 1789104578,
+    "instruction": "config_transaction_create",
+    "signature": "41dZHAzXA3YjEnrbBhFtAGyDHXNdHPhsd4SNzmJ6tiWZRhs2wHs9zisdEQTBNG6eEvuwmXGyLSckg71uh3ehZCZb",
+    "slot": 446077626,
+    "state": {
+     "members": [
+      "2Lp91FyJUb8MQ1yteFLKh345Umb5f1RgCCwwDFNCYEcD",
+      "2ZqTm9ytxsEByJWzD55bePdNyqgwgGB5SqdaP7uJhU2k",
+      "EHQZBu5y3G8Lo5Vb2HH48DRjtajdzJwX499Cs9E8mSfY",
+      "EHVcpEgD8JsP4MfKR9tBz6NXk8jymHuRNouEsJuyKGux",
+      "EkDhR65JUL8tGhxRhnueaqri6zNzxMEJ82UU35pQ7V56",
+      "iMxHnYidtLgmGx8mX4KfT4GRhzAZn3aFVY59qR3dF6b"
+     ],
+     "threshold": 3,
+     "time_lock_s": 0
+    }
+   },
+   {
+    "actions": [
+     [
+      "RemoveMember",
+      "EHQZBu5y3G8Lo5Vb2HH48DRjtajdzJwX499Cs9E8mSfY"
+     ]
+    ],
+    "block_time": 1789104738,
+    "instruction": "config_transaction_execute",
+    "signature": "ZiFcJDEZQo6qETu7GaLn5GVgpUkchoR7QST1xktGeAm1Dp5QnSs8kvMRR4rdzRh19nBeZ57WAPRVfrWjfZSpMX2",
+    "slot": 446078141,
+    "state": {
+     "members": [
+      "2Lp91FyJUb8MQ1yteFLKh345Umb5f1RgCCwwDFNCYEcD",
+      "2ZqTm9ytxsEByJWzD55bePdNyqgwgGB5SqdaP7uJhU2k",
+      "EHVcpEgD8JsP4MfKR9tBz6NXk8jymHuRNouEsJuyKGux",
+      "EkDhR65JUL8tGhxRhnueaqri6zNzxMEJ82UU35pQ7V56",
+      "iMxHnYidtLgmGx8mX4KfT4GRhzAZn3aFVY59qR3dF6b"
+     ],
+     "threshold": 3,
+     "time_lock_s": 0
+    }
+   },
+   {
+    "actions": null,
+    "block_time": 1789106285,
+    "instruction": "config_transaction_create",
+    "signature": "3bmZnUVotKwGDpExxBx18PDc4bSkH8vKCMoX2mg1oExyvQtL8y6guZ4V55yfGVaaebLMKF6zFvL8pLhUhSNqfoQE",
+    "slot": 446083030,
+    "state": {
+     "members": [
+      "2Lp91FyJUb8MQ1yteFLKh345Umb5f1RgCCwwDFNCYEcD",
+      "2ZqTm9ytxsEByJWzD55bePdNyqgwgGB5SqdaP7uJhU2k",
+      "EHVcpEgD8JsP4MfKR9tBz6NXk8jymHuRNouEsJuyKGux",
+      "EkDhR65JUL8tGhxRhnueaqri6zNzxMEJ82UU35pQ7V56",
+      "iMxHnYidtLgmGx8mX4KfT4GRhzAZn3aFVY59qR3dF6b"
+     ],
+     "threshold": 3,
+     "time_lock_s": 0
+    }
+   },
+   {
+    "actions": [
+     [
+      "AddMember",
+      "2FndD1W9C389Lat4UGktcBYoVjAQWstG4k6abxphPEes"
+     ]
+    ],
+    "block_time": 1789106335,
+    "instruction": "config_transaction_execute",
+    "signature": "3dAHpYGc68StsQjkXzH5QRpFHJ65nSMb5oV6qUheP4UqyAfYBGqa8FtVjpZ7MUmAYA2UUXoLj4XgpSCGHxS7bCR3",
+    "slot": 446083193,
+    "state": {
+     "members": [
+      "2FndD1W9C389Lat4UGktcBYoVjAQWstG4k6abxphPEes",
+      "2Lp91FyJUb8MQ1yteFLKh345Umb5f1RgCCwwDFNCYEcD",
+      "2ZqTm9ytxsEByJWzD55bePdNyqgwgGB5SqdaP7uJhU2k",
+      "EHVcpEgD8JsP4MfKR9tBz6NXk8jymHuRNouEsJuyKGux",
+      "EkDhR65JUL8tGhxRhnueaqri6zNzxMEJ82UU35pQ7V56",
+      "iMxHnYidtLgmGx8mX4KfT4GRhzAZn3aFVY59qR3dF6b"
+     ],
+     "threshold": 3,
+     "time_lock_s": 0
+    }
+   },
+   {
+    "actions": null,
+    "block_time": 1789107330,
+    "instruction": "config_transaction_create",
+    "signature": "3PNqdaJm6mbgtpknEKPf3LjZdEhtbupSd5yL4hXJCxp5Bb3ehbxhHaYpeZvCNyYSBLfVhXXFQQ7FT1aw9FMr5RTK",
+    "slot": 446086337,
+    "state": {
+     "members": [
+      "2FndD1W9C389Lat4UGktcBYoVjAQWstG4k6abxphPEes",
+      "2Lp91FyJUb8MQ1yteFLKh345Umb5f1RgCCwwDFNCYEcD",
+      "2ZqTm9ytxsEByJWzD55bePdNyqgwgGB5SqdaP7uJhU2k",
+      "EHVcpEgD8JsP4MfKR9tBz6NXk8jymHuRNouEsJuyKGux",
+      "EkDhR65JUL8tGhxRhnueaqri6zNzxMEJ82UU35pQ7V56",
+      "iMxHnYidtLgmGx8mX4KfT4GRhzAZn3aFVY59qR3dF6b"
+     ],
+     "threshold": 3,
+     "time_lock_s": 0
+    }
+   },
+   {
+    "actions": [
+     [
+      "RemoveMember",
+      "EHVcpEgD8JsP4MfKR9tBz6NXk8jymHuRNouEsJuyKGux"
+     ],
+     [
+      "RemoveMember",
+      "EkDhR65JUL8tGhxRhnueaqri6zNzxMEJ82UU35pQ7V56"
+     ]
+    ],
+    "block_time": 1789107564,
+    "instruction": "config_transaction_execute",
+    "signature": "4qUMTiSFcnpwgVWYn92QGaLpc3QMToCqS5pBstz9PWRjyCttFFuKs28AdX3Ea65F9TuUTEsvejaKKVg27fmgK93m",
+    "slot": 446087082,
+    "state": {
+     "members": [
+      "2FndD1W9C389Lat4UGktcBYoVjAQWstG4k6abxphPEes",
+      "2Lp91FyJUb8MQ1yteFLKh345Umb5f1RgCCwwDFNCYEcD",
+      "2ZqTm9ytxsEByJWzD55bePdNyqgwgGB5SqdaP7uJhU2k",
+      "iMxHnYidtLgmGx8mX4KfT4GRhzAZn3aFVY59qR3dF6b"
+     ],
+     "threshold": 3,
+     "time_lock_s": 0
+    }
+   },
+   {
+    "actions": null,
+    "block_time": 1789408993,
+    "instruction": "config_transaction_create",
+    "signature": "EmjfhTKhywyzDzrm9htERG1QEusWbHWxuucYRmpRv8Ts3FergQYm8Jk5Nurz6e6u7aXg5AmoxN2xGXAYfXuyRud",
+    "slot": 447040181,
+    "state": {
+     "members": [
+      "2FndD1W9C389Lat4UGktcBYoVjAQWstG4k6abxphPEes",
+      "2Lp91FyJUb8MQ1yteFLKh345Umb5f1RgCCwwDFNCYEcD",
+      "2ZqTm9ytxsEByJWzD55bePdNyqgwgGB5SqdaP7uJhU2k",
+      "iMxHnYidtLgmGx8mX4KfT4GRhzAZn3aFVY59qR3dF6b"
+     ],
+     "threshold": 3,
+     "time_lock_s": 0
+    }
+   },
+   {
+    "actions": null,
+    "block_time": 1789409024,
+    "instruction": "config_transaction_create",
+    "signature": "2UHwZ1dnQhGw3v5Jtyhb5VmjKmwSKtqshQbscGUcFBp7ES1aRyXMocJFvGrAfgcMQ3oGB1ULyemnZBtvq54Crb5U",
+    "slot": 447040279,
+    "state": {
+     "members": [
+      "2FndD1W9C389Lat4UGktcBYoVjAQWstG4k6abxphPEes",
+      "2Lp91FyJUb8MQ1yteFLKh345Umb5f1RgCCwwDFNCYEcD",
+      "2ZqTm9ytxsEByJWzD55bePdNyqgwgGB5SqdaP7uJhU2k",
+      "iMxHnYidtLgmGx8mX4KfT4GRhzAZn3aFVY59qR3dF6b"
+     ],
+     "threshold": 3,
+     "time_lock_s": 0
+    }
+   },
+   {
+    "actions": null,
+    "block_time": 1789409049,
+    "instruction": "config_transaction_create",
+    "signature": "2samKvrkbhraigPyWeA1DzmbiWFZaaf9iRvX1A5tT9MB1Dut4fRdQrcY5HxmgGkCtn1t5Tzf3VPQTFnRFaKnkWyx",
+    "slot": 447040356,
+    "state": {
+     "members": [
+      "2FndD1W9C389Lat4UGktcBYoVjAQWstG4k6abxphPEes",
+      "2Lp91FyJUb8MQ1yteFLKh345Umb5f1RgCCwwDFNCYEcD",
+      "2ZqTm9ytxsEByJWzD55bePdNyqgwgGB5SqdaP7uJhU2k",
+      "iMxHnYidtLgmGx8mX4KfT4GRhzAZn3aFVY59qR3dF6b"
+     ],
+     "threshold": 3,
+     "time_lock_s": 0
+    }
+   },
+   {
+    "actions": [
+     [
+      "AddMember",
+      "39J9pXPuSvT8WQEdLu198onCij1oG1VLeWuiHfwPCvM5"
+     ]
+    ],
+    "block_time": 1789409382,
+    "instruction": "config_transaction_execute",
+    "signature": "5KkEUQnar6PgwDCGHdqu9XZs6ri7k2rWyyY32YKLrVco1DhSiCR2z3t9cQ1nHUqbEPw7tauptkWrb2QY4X8pkin4",
+    "slot": 447041423,
+    "state": {
+     "members": [
+      "2FndD1W9C389Lat4UGktcBYoVjAQWstG4k6abxphPEes",
+      "2Lp91FyJUb8MQ1yteFLKh345Umb5f1RgCCwwDFNCYEcD",
+      "2ZqTm9ytxsEByJWzD55bePdNyqgwgGB5SqdaP7uJhU2k",
+      "39J9pXPuSvT8WQEdLu198onCij1oG1VLeWuiHfwPCvM5",
+      "iMxHnYidtLgmGx8mX4KfT4GRhzAZn3aFVY59qR3dF6b"
+     ],
+     "threshold": 3,
+     "time_lock_s": 0
+    }
+   },
+   {
+    "actions": null,
+    "block_time": 1789409420,
+    "instruction": "config_transaction_create",
+    "signature": "2oHX9pAkTAanBxQC82VXckacyjLecGkGrRLUPwRHfbudofKZsYNyh6rURVF5CnDGHMXNKpcEtZQSahF8CURbqEFe",
+    "slot": 447041542,
+    "state": {
+     "members": [
+      "2FndD1W9C389Lat4UGktcBYoVjAQWstG4k6abxphPEes",
+      "2Lp91FyJUb8MQ1yteFLKh345Umb5f1RgCCwwDFNCYEcD",
+      "2ZqTm9ytxsEByJWzD55bePdNyqgwgGB5SqdaP7uJhU2k",
+      "39J9pXPuSvT8WQEdLu198onCij1oG1VLeWuiHfwPCvM5",
+      "iMxHnYidtLgmGx8mX4KfT4GRhzAZn3aFVY59qR3dF6b"
+     ],
+     "threshold": 3,
+     "time_lock_s": 0
+    }
+   },
+   {
+    "actions": [
+     [
+      "AddMember",
+      "3dkwZCVYnm8bD1mHWF9bBQeCuVeCwMpvsf5PiGQabDNK"
+     ]
+    ],
+    "block_time": 1789409535,
+    "instruction": "config_transaction_execute",
+    "signature": "2SHjRXa7KecnkQGJUxLNSzbVL5jTzYePmXNuuH5aJafrLnHCfRZeakwRSY5MWsWw3HRyLovSgqF6KeNvkabMzbPP",
+    "slot": 447041907,
+    "state": {
+     "members": [
+      "2FndD1W9C389Lat4UGktcBYoVjAQWstG4k6abxphPEes",
+      "2Lp91FyJUb8MQ1yteFLKh345Umb5f1RgCCwwDFNCYEcD",
+      "2ZqTm9ytxsEByJWzD55bePdNyqgwgGB5SqdaP7uJhU2k",
+      "39J9pXPuSvT8WQEdLu198onCij1oG1VLeWuiHfwPCvM5",
+      "3dkwZCVYnm8bD1mHWF9bBQeCuVeCwMpvsf5PiGQabDNK",
+      "iMxHnYidtLgmGx8mX4KfT4GRhzAZn3aFVY59qR3dF6b"
+     ],
+     "threshold": 3,
+     "time_lock_s": 0
+    }
+   },
+   {
+    "actions": null,
+    "block_time": 1789409734,
+    "instruction": "config_transaction_create",
+    "signature": "58SNwZUkXGwWyLCnRFgDtMpk6dGnuApPxHYHDfyBJ7t8sTGfusMRHzZ77Kar4fQeFHzms3Tm4myPbGRCgy8SMbfP",
+    "slot": 447042542,
+    "state": {
+     "members": [
+      "2FndD1W9C389Lat4UGktcBYoVjAQWstG4k6abxphPEes",
+      "2Lp91FyJUb8MQ1yteFLKh345Umb5f1RgCCwwDFNCYEcD",
+      "2ZqTm9ytxsEByJWzD55bePdNyqgwgGB5SqdaP7uJhU2k",
+      "39J9pXPuSvT8WQEdLu198onCij1oG1VLeWuiHfwPCvM5",
+      "3dkwZCVYnm8bD1mHWF9bBQeCuVeCwMpvsf5PiGQabDNK",
+      "iMxHnYidtLgmGx8mX4KfT4GRhzAZn3aFVY59qR3dF6b"
+     ],
+     "threshold": 3,
+     "time_lock_s": 0
+    }
+   },
+   {
+    "actions": [
+     [
+      "AddMember",
+      "4cp3jLgETkj3SWXdCvaeMFtgJSRvZwqHkvHB8VXjZRhP"
+     ]
+    ],
+    "block_time": 1789409825,
+    "instruction": "config_transaction_execute",
+    "signature": "5cP9enuczyeHjBRE89ihWGobUNwQxJ97BX4uqx5YP3yddZoSFiU5A822Qwk4R6vNbsZcSACqmzG1NhtiwfrjJbJ2",
+    "slot": 447042828,
+    "state": {
+     "members": [
+      "2FndD1W9C389Lat4UGktcBYoVjAQWstG4k6abxphPEes",
+      "2Lp91FyJUb8MQ1yteFLKh345Umb5f1RgCCwwDFNCYEcD",
+      "2ZqTm9ytxsEByJWzD55bePdNyqgwgGB5SqdaP7uJhU2k",
+      "39J9pXPuSvT8WQEdLu198onCij1oG1VLeWuiHfwPCvM5",
+      "3dkwZCVYnm8bD1mHWF9bBQeCuVeCwMpvsf5PiGQabDNK",
+      "4cp3jLgETkj3SWXdCvaeMFtgJSRvZwqHkvHB8VXjZRhP",
+      "iMxHnYidtLgmGx8mX4KfT4GRhzAZn3aFVY59qR3dF6b"
+     ],
+     "threshold": 3,
+     "time_lock_s": 0
+    }
+   }
+  ],
+  "skipped_window_utc": [
+   "2026-09-11T13:19:00+00:00",
+   "2026-09-12T09:21:00+00:00"
+  ],
+  "transactions_listed": 2157,
+  "transactions_replayed": 309
+ },
+ "sources": [
+  "https://cryptoticker.io/en/tokenized-assets-solana-freeze-authority-clawback-check/ (13/09/2026: multisig compromised around 01:00 UTC on 11/09; freeze authority and permanent delegate on the same address)",
+  "mint SiLVFMgD3eD2rgK628NbTBq9MnuJF5FW2CRaVyTB35L listed for Dominion Silver by DexScreener, Phantom, Solana Compass, DexPaprika (not confirmed on the issuer's own site)",
+  "multisig BjbtdEcy324Xdmt9182D8FZYGiH2nhTLFHP7EaAEXLAi: the Squads v4 account named by the vault transaction 3V2U6E2f\u2026 (02:23:33 UTC)"
+ ],
+ "vault": "FqFNXCMeEYUD64tLPhvVzBAnovfYBAGsU8d6qdLnvzZ3",
+ "vault_index": 0
+}

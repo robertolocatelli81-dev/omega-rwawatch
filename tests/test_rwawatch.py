@@ -18,6 +18,20 @@ import rwawatch_agents as agents            # noqa: E402
 import rwawatch_orchestrator as orch        # noqa: E402
 
 PROD_PATHS = (orch.MEMORY, orch.LATEST, orch.EVIDENCE_DIR, orch.KEY_PATH)   # captured at import, asserted untouched
+VECTORS = os.path.join(HERE, "vectors")
+_SOL_ACCOUNT = getattr(core, "_sol_account", None)
+
+
+def setUpModule():
+    """No test reaches a Solana node: a holder account read answers a system account with no data unless a test says
+    otherwise (the ETF tests fake the mint read only)."""
+    if _SOL_ACCOUNT is not None:
+        core._sol_account = lambda address: ("11111111111111111111111111111111", b"")
+
+
+def tearDownModule():
+    if _SOL_ACCOUNT is not None:
+        core._sol_account = _SOL_ACCOUNT
 
 
 def _fingerprint(path):
@@ -30,12 +44,24 @@ def _fingerprint(path):
     return (True, len(data), hashlib.sha256(data).hexdigest())
 
 
+def _ctl(owner=core.EXPECTED_OWNER, holders=None, **powers):
+    """A well-formed control record (rwawatch-control/1) for the council's mechanics tests: owner() held by `owner`
+    (absent when None), the other powers not evaluated unless given; every holder a single key unless given."""
+    ne = lambda: core._power("not_evaluated", reason="test")                                   # noqa: E731
+    pw = {"owner": core._power("present", owner, "owner()") if owner else core._power("absent", source="owner() reverted"),
+          "upgrade": ne(), "mint": ne(), "freeze": ne(), "seize": ne(), "pause": ne()}
+    pw.update(powers)
+    hd = {p["holder"]: core._holder("eoa", source="test") for p in pw.values() if p["holder"]}
+    hd.update(holders or {})
+    return {"spec": core.CONTROL_SPEC, "powers": pw, "holders": hd}
+
+
 def _token(chain, supply, impl_hash="aa", eps=(), address=None, owner=core.EXPECTED_OWNER):
     return {"token": "BUIDL", "address": address or f"0x{chain[:4].encode().hex():0<40}", "symbol": "BUIDL", "owner": owner,
             "expected_owner": core.EXPECTED_OWNER,
             "total_supply": supply,
             "total_supply_raw": str(int(round(supply * 10 ** 6))), "decimals": 6,
-            "implementation_code_sha256": impl_hash, "eip712_entry_points": list(eps)}
+            "implementation_code_sha256": impl_hash, "eip712_entry_points": list(eps), "control": _ctl(owner)}
 
 
 def _snap(supplies, not_assessed=(), impl=None, eps=None, addr=None, owner=None, unregistered=None):
@@ -89,6 +115,8 @@ class FakeNode:
         addr = params[0]["to"] if method == "eth_call" else params[0]
         ctl = core.CONTROLS[chain][1].lower()
         if method == "eth_getCode":
+            if self.owner and addr.lower() == self.owner.lower():
+                return "0x"                                                 # the owner: one key, no code
             if addr.lower() == "0x" + "f1" * 20:
                 return "0x60" + "01" * 300                                  # a facet's code
             if addr.lower() == "0x" + "11" * 20:
@@ -106,6 +134,8 @@ class FakeNode:
             return "0x" + "00" * 32
         if method == "eth_call":
             data = params[0]["data"]
+            if data[2:10] in {core.HOLDER_SELECTORS[k] for k in ("getOwners", "getThreshold", "required", "getMinDelay")}:
+                raise core.RpcError("execution reverted")                    # no multisig / timelock interface here
             if addr.lower() == "0x" + "b1" * 20:                              # the beacon
                 if data == core.BEACON_IMPL_SELECTOR and self.beacon == "ok":
                     return "0x" + "00" * 12 + "11" * 20
@@ -310,6 +340,8 @@ class TestNonEvm(unittest.TestCase):
                 return 450
             if method == "getBlockTime":
                 return bt
+            if method == "getAccountInfo" and params[1].get("encoding") == "base64":
+                return {"context": {"slot": 450}, "value": {"owner": "11111111111111111111111111111111", "data": ["", "base64"]}}
             if method == "getAccountInfo":
                 ext = control_ext if params[0] == core.SOLANA_CONTROL[1] else ("permanentDelegate", "transferHook", "tokenMetadata")
                 exts = [{"extension": e, "state": ({"name": "BlackRock USD Institutional Digital Liquidity Fund", "symbol": "BUIDL"}
@@ -508,7 +540,7 @@ class TestDiamondStellarMultiToken(unittest.TestCase):
 
     def test_token_without_control_key_is_not_owner_checked(self):
         s = _snap({"ethereum": 100})
-        s["signal"]["chains"][0]["tokens"].append(dict(_token("ethereum", 5), token="BENJI", owner=None, expected_owner=None))
+        s["signal"]["chains"][0]["tokens"].append(dict(_token("ethereum", 5, owner=None), token="BENJI", expected_owner=None))
         self.assertEqual(agents._agent_owner(s)[0], "QUIET")
 
 
@@ -909,6 +941,572 @@ class TestMemoryIntegrity(unittest.TestCase):
                     # must not raise, must not skip the record (a malformed LAST record is not a PASS), same message everywhere
                     self.assertEqual(core.verify_chain(chain), (False, f"malformed record at #{at}"))
 
+
+
+# ───────────────────────── rwawatch-control/1 (spec/control-record.md) ──
+def _vector(name):
+    with open(os.path.join(VECTORS, f"{name}.json"), encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _one_chain(chain, tokens, layer="signal"):
+    s = {"signal": {"chains_assessed": [chain], "chains_not_assessed": [],
+                    "chains": [{"chain": chain, "assessed": True, "tokens": tokens, "discovery": {"unregistered": []}}]}}
+    if layer == "etf_signal":
+        s["etf_signal"] = s.pop("signal")
+        s["signal"] = {"chains_assessed": [], "chains_not_assessed": [], "chains": []}
+    return s
+
+
+def _vote(verdict, agent):
+    """The vote of one analyst, by its position in the council."""
+    names = [a.__name__ for a in agents.COUNCIL] + ["_agent_supply_move"]
+    return verdict["votes"][names.index(agent)]
+
+
+class _Replay:
+    """Answers JSON-RPC from a vector recorded on two public archive nodes; a call that was not recorded fails."""
+    def __init__(self, answers):
+        self.answers, self.asked = answers, set()
+
+    def __call__(self, chain, method, params, timeout=25):
+        key = json.dumps([method, params], sort_keys=True)
+        if key not in self.answers:
+            raise AssertionError(f"unrecorded call {key}")
+        self.asked.add(key)
+        a = self.answers[key]
+        if "error" in a:
+            raise core.RpcError(a["error"])
+        return a["result"]
+
+
+class TestIncidentVectors(unittest.TestCase):
+    """Real incidents, rebuilt from public data at fixed blocks / slots (tests/vectors, tools/record_vectors.py and
+    tools/reconstruct_squads.py). On 0.2.0 (cfa5f39) the council had no control record: StablR and SILV came back QUIET.
+    CR-1 CR-14 CR-15 P1 P2."""
+
+    def setUp(self):
+        self._rpc = core.rpc
+
+    def tearDown(self):
+        core.rpc = self._rpc
+
+    def _evm_reading(self, v, side):
+        core.rpc = _Replay(v["answers"][side])
+        b = hex(v["blocks"][side])
+        if v["mode"] == "token":
+            t = core.read_evm_token(v["chain"], v["entry"], b)
+        else:
+            t = core.read_structure(v["chain"], v["entry"]["address"], b)
+            owner = core.read_owner(v["chain"], v["entry"]["address"], b)
+            t.update({"token": v["entry"]["token"], "address": v["entry"]["address"], "owner": owner,
+                      "control": core.evm_control(v["chain"], v["entry"]["address"], b, t, owner)})
+        self.assertEqual(core.rpc.asked, set(v["answers"][side]))     # every recorded answer was needed, no more
+        return t
+
+    def _check_evm(self, name):
+        v = _vector(name)
+        before, after = self._evm_reading(v, "before"), self._evm_reading(v, "after")
+        self.assertEqual((before, after), (v["reading"]["before"], v["reading"]["after"]))   # the reader is deterministic
+        verdict = agents.judge(_one_chain(v["chain"], [after]), _one_chain(v["chain"], [before]))
+        vote = _vote(verdict, v["expect"]["agent"])
+        self.assertEqual((verdict["posture"], vote["posture"]), (v["expect"]["posture"], "ELEVATED"), vote)
+        for needle in v["expect"]["contains"]:
+            self.assertIn(needle, vote["why"])
+        same = agents.judge(_one_chain(v["chain"], [before]), _one_chain(v["chain"], [copy.deepcopy(before)]))
+        for needle in v["expect"]["contains"]:                                              # null control: no change
+            self.assertNotIn(needle, _vote(same, v["expect"]["agent"])["why"])
+        self.assertEqual(_vote(same, "_agent_control")["posture"], "QUIET")
+        return before, after
+
+    def test_stablr_multisig_members_changed_under_the_same_owner(self):
+        """CR-14 P2: owner() of USDR is the same MultiSigWallet before and after; its owner list is not."""
+        before, after = self._check_evm("stablr_usdr_20260524")
+        self.assertEqual(before["owner"], after["owner"])
+        ms = "0xf45392bd2d6e6b8c5dc26ba6c8a12889419b82f3"
+        self.assertEqual((before["control"]["holders"][ms]["kind"], before["control"]["holders"][ms]["source"],
+                          before["control"]["holders"][ms]["threshold"]), ("multisig", "multisigwallet", 1))
+        self.assertIn("0xd4677b5a8b1b97ea213fdb876b0fcbab3f9f6cd1", after["control"]["holders"][ms]["members"])
+
+    def test_zoth_implementation_replaced(self):
+        """CR-7 P1: the implementation behind the proxy changed; the upgrade gate is in code (not evaluated)."""
+        before, after = self._check_evm("zoth_subvault_20250321")
+        self.assertNotEqual(before["implementation"], after["implementation"])
+        self.assertEqual(after["control"]["powers"]["upgrade"]["status"], "not_evaluated")
+
+    def test_hinc_owner_moved_from_one_key_to_a_timelock(self):
+        """CR-6 CR-14 P1: no on-chain timelock (LlamaRisk, 15/09/2026), then owner() a TimelockController of 43200 s."""
+        before, after = self._check_evm("hinc_owner_timelock_2026")
+        hb = before["control"]["holders"][before["control"]["powers"]["owner"]["holder"]]
+        ha = after["control"]["holders"][after["control"]["powers"]["owner"]["holder"]]
+        self.assertEqual((hb["kind"], ha["kind"], ha["min_delay_s"]), ("eoa", "timelock", 43200))
+
+    def test_silv_multisig_behind_freeze_and_seize_changed(self):
+        """CR-15 P2: the freeze authority and the permanent delegate are one Squads vault; the multisig behind it
+        changed members on 11/09/2026 (rebuilt from public transactions; the rebuilt end state equals the account)."""
+        v = _vector("silv_squads_20260911")
+        today = core.decode_squads_multisig(__import__("base64").b64decode(v["multisig_account_today_base64"]))
+        self.assertEqual((today["members"], today["threshold"], today["time_lock_s"]),
+                         (v["replay"]["events"][-1]["state"]["members"], v["replay"]["events"][-1]["state"]["threshold"],
+                          v["replay"]["events"][-1]["state"]["time_lock_s"]))
+        self.assertEqual(core.squads_vault(v["multisig"], v["vault_index"]), v["vault"])
+        self.assertNotEqual(core.squads_vault(v["multisig"], v["vault_index"] + 1), v["vault"])
+        info = v["mint_account_today"]["value"]["data"]["parsed"]["info"]
+        ext = {e["extension"]: e.get("state") for e in info.get("extensions", [])}
+        self.assertEqual((info["freezeAuthority"], ext["permanentDelegate"]["delegate"]), (v["vault"], v["vault"]))
+
+        def record(side):
+            cfg = v["configs"][side]
+
+            def read(h):
+                if h == v["vault"]:
+                    return core._holder("multisig", members=cfg["members"], threshold=cfg["threshold"],
+                                        min_delay_s=cfg["time_lock_s"], source=f"squads-v4 vault 0 of {v['multisig']}")
+                return core._holder("account", reason="a key or a program-derived address: who signs for it is not read")
+            t = {"token": "SILV", "address": v["mint"], "symbol": "SILV", "total_supply": 1.0,
+                 "control": core.solana_control(info, ext, read=read)}
+            return t
+        verdict = agents.judge(_one_chain("solana", [record("after")]), _one_chain("solana", [record("before")]))
+        vote = _vote(verdict, "_agent_control")
+        self.assertEqual((verdict["posture"], vote["posture"]), ("ELEVATED", "ELEVATED"))
+        self.assertIn(f"holder {v['vault']}: members", vote["why"])
+        self.assertEqual(_vote(agents.judge(_one_chain("solana", [record("before")]),
+                                            _one_chain("solana", [record("before")])), "_agent_control")["posture"], "QUIET")
+
+
+class TestCouncilControlProbe(unittest.TestCase):
+    """The probe of 13/11/2026 on 0.2.0 (cfa5f39): mint authority and implementation changes were ELEVATED (positive
+    control), freeze authority, permanent delegate and the ETF layer's keys were QUIET. P3 P4 P5 P7."""
+    B = {"token": "X", "address": "M", "symbol": "X", "decimals": 6, "total_supply": 100.0, "owner": "K",
+         "expected_owner": "K", "freeze_authority": "F", "permanent_delegate": "D", "implementation_code_sha256": "aa",
+         "eip712_entry_points": []}
+
+    def _s(self, t, etf=None):
+        s = _one_chain("solana", [t])
+        s["etf_signal"] = etf if etf is not None else {"chains": [], "chains_assessed": [], "chains_not_assessed": []}
+        return s
+
+    def _j(self, change, with_control=True):
+        b = dict(self.B, control=_ctl("K")) if with_control else dict(self.B)
+        return agents.judge(self._s(dict(b, **change)), self._s(b))
+
+    def test_probe_positive_controls_still_elevated(self):
+        self.assertEqual(self._j({"owner": "Z"})["posture"], "ELEVATED")
+        self.assertEqual(self._j({"implementation_code_sha256": "bb"})["posture"], "ELEVATED")
+
+    def test_freeze_authority_and_permanent_delegate_changes_are_elevated(self):
+        """P3: with or without a control record in the baseline (P7: a baseline written by 0.2.0 has none)."""
+        for wc in (True, False):
+            for field in ("freeze_authority", "permanent_delegate"):
+                with self.subTest(field=field, control=wc):
+                    b = dict(self.B, control=_ctl("K"))
+                    prev = b if wc else dict(self.B)
+                    v = agents.judge(self._s(dict(b, **{field: "Z"})), self._s(prev))
+                    self.assertEqual(_vote(v, "_agent_control")["posture"], "ELEVATED")
+                    self.assertIn(f"{field} {self.B[field]} -> Z", _vote(v, "_agent_control")["why"])
+
+    def test_first_control_reading_is_said_not_raised(self):
+        """P7"""
+        v = agents.judge(self._s(dict(self.B, control=_ctl("K"))), self._s(dict(self.B)))
+        self.assertEqual(v["posture"], "QUIET", v)
+        self.assertIn("first control reading", _vote(v, "_agent_control")["why"])
+
+    def test_etf_authorities_not_the_issuers_are_elevated(self):
+        """P4"""
+        e = lambda ok: {"chains": [{"chain": "solana", "assessed": True, "tokens": [            # noqa: E731
+            {"token": "SPYx", "readable": True, "same_mint_authority": ok, "same_freeze_authority": ok,
+             "mint_authority": "A", "freeze_authority": "F", "control": _ctl(None)}]}],
+            "chains_assessed": ["solana"], "chains_not_assessed": []}
+        b = dict(self.B, control=_ctl("K"))
+        v = agents.judge(self._s(b, e(False)), self._s(b, e(True)))
+        self.assertEqual(_vote(v, "_agent_etf")["posture"], "ELEVATED")
+        self.assertIn("same_mint_authority false", _vote(v, "_agent_etf")["why"])
+        self.assertEqual(agents.judge(self._s(b, e(True)), self._s(b, e(True)))["posture"], "QUIET")
+
+    def test_etf_chain_not_assessed_or_token_unreadable_is_elevated(self):
+        """P5"""
+        b = dict(self.B, control=_ctl("K"))
+        down = {"chains": [{"chain": "bsc", "assessed": False, "reason": "stale node"}], "chains_assessed": [],
+                "chains_not_assessed": ["bsc"]}
+        self.assertEqual(_vote(agents.judge(self._s(b, down), self._s(b)), "_agent_etf")["posture"], "ELEVATED")
+        unread = {"chains": [{"chain": "ethereum", "assessed": True, "tokens": [{"token": "bCSPX", "readable": False,
+                  "reason": "proxy"}]}], "chains_assessed": ["ethereum"], "chains_not_assessed": []}
+        self.assertEqual(_vote(agents.judge(self._s(b, unread), self._s(b)), "_agent_etf")["posture"], "ELEVATED")
+        gone = agents.judge(_one_chain("solana", [b]), self._s(b))
+        self.assertEqual(_vote(gone, "_agent_etf")["posture"], "ELEVATED")       # the layer was read, now missing
+
+    def test_etf_layer_reaches_the_council_through_the_baseline(self):
+        """P1 P4: orchestrator.baseline carries the ETF layer (before 0.3.0 it carried the fund layer only)."""
+        b = dict(self.B, control=_ctl("K"))
+        etf = {"chains": [{"chain": "ethereum", "assessed": True, "tokens": [dict(_token("ethereum", 3.0), token="bCSPX",
+               readable=True, same_owner=True)]}], "chains_assessed": ["ethereum"], "chains_not_assessed": []}
+        base = orch.baseline([{"snapshot": self._s(b, etf)}])
+        self.assertEqual(base["etf_signal"]["chains"], etf["chains"])
+        moved = copy.deepcopy(etf)
+        moved["chains"][0]["tokens"][0]["control"] = _ctl("0x" + "ab" * 20)
+        v = agents.judge(self._s(b, moved), base)
+        self.assertIn("ethereum/bCSPX (ETF): owner present", _vote(v, "_agent_control")["why"])
+
+
+class TestControlRecord(unittest.TestCase):
+    """The control record as the readers write it, and as the council refuses it when it breaks the specification."""
+
+    def setUp(self):
+        self._rpc, self._acc = core.rpc, core._sol_account
+
+    def tearDown(self):
+        core.rpc, core._sol_account = self._rpc, self._acc
+
+    def test_spec_has_no_orphans(self):
+        """CR-2 CR-3 CR-4 CR-5 CR-13: every clause has a test, the record's keys and vocabularies equal the spec's."""
+        sys.path.insert(0, os.path.join(os.path.dirname(HERE), "tools"))
+        import spec_orphans
+        defined, found = spec_orphans.orphans()
+        self.assertGreaterEqual(len(defined), 30)
+        self.assertEqual(found, [])
+
+    def test_evm_reader_writes_the_record(self):
+        """CR-1 CR-6 CR-7 CR-8 CR-9 CR-10 CR-11 CR-12 CR-14: owner() one key; EIP-1967 with an empty admin slot; the
+        powers EVM cannot enumerate are not evaluated, never absent."""
+        core.rpc = FakeNode()
+        c = core.read_chain("arbitrum", ENTRY, now=NOW, discovery=False)
+        ctl = c["tokens"][0]["control"]
+        self.assertIsNone(agents.validate_control(ctl))
+        self.assertEqual(ctl["powers"]["owner"], core._power("present", core.EXPECTED_OWNER, "owner()"))
+        self.assertEqual(ctl["powers"]["upgrade"]["status"], "not_evaluated")
+        for p in ("mint", "freeze", "seize", "pause"):
+            self.assertEqual(ctl["powers"][p]["status"], "not_evaluated")
+        self.assertEqual(ctl["holders"], {core.EXPECTED_OWNER: core._holder("eoa", source="no code at the address")})
+
+    def _rpc_with(self, storage=None, calls=None, code=None):
+        def rpc(chain, method, params, timeout=25):
+            if method == "eth_getStorageAt":
+                return (storage or {}).get(params[1], "0x" + "00" * 32)
+            if method == "eth_getCode":
+                return (code or {}).get(params[0], "0x60" + "00" * 100)
+            if method == "eth_call":
+                k = (params[0]["to"], params[0]["data"])
+                if k in (calls or {}):
+                    return calls[k]
+                raise core.RpcError("execution reverted")
+            raise AssertionError(method)
+        return rpc
+
+    def test_upgrade_power_per_proxy_kind(self):
+        """CR-7"""
+        adm = "0x" + "ad" * 20
+        core.rpc = self._rpc_with(storage={core.EIP1967_ADMIN_SLOT: "0x" + "00" * 12 + "ad" * 20})
+        self.assertEqual(core.evm_upgrade_power("ethereum", "0xT", "0x1", {"implementation_slot": "eip1967"}),
+                         core._power("present", adm, "eip1967.admin"))
+        core.rpc = self._rpc_with(calls={("0x" + "b1" * 20, "0x8da5cb5b"): "0x" + "00" * 12 + "be" * 20})
+        self.assertEqual(core.evm_upgrade_power("ethereum", "0xT", "0x1", {"implementation_slot": "beacon", "beacon": "0x" + "b1" * 20}),
+                         core._power("present", "0x" + "be" * 20, "beacon.owner()"))
+        self.assertEqual(core.evm_upgrade_power("ethereum", "0xT", "0x1", {"implementation_slot": None})["status"], "absent")
+        for slot in ("eip2535", "slot1", "zeppelinos"):
+            self.assertEqual(core.evm_upgrade_power("ethereum", "0xT", "0x1", {"implementation_slot": slot})["status"], "not_evaluated")
+        core.rpc = self._rpc_with()
+        self.assertEqual(core.evm_upgrade_power("ethereum", "0xT", "0x1", {"implementation_slot": "eip1967"})["status"], "not_evaluated")
+
+    def test_holder_kinds(self):
+        """CR-14: Safe, MultiSigWallet, TimelockController, a contract with owner() (one level), a bare contract, one key."""
+        w = lambda n: "0x" + hex(n)[2:].rjust(64, "0")                                    # noqa: E731
+        owners = "0x" + "20".rjust(64, "0") + "2".rjust(64, "0") + ("00" * 12 + "02" * 20) + ("00" * 12 + "01" * 20)
+        H = core.HOLDER_SELECTORS
+        cases = {
+            "safe": ({("0xS", "0x" + H["getOwners"]): owners, ("0xS", "0x" + H["getThreshold"]): w(2)}, "0xS",
+                     core._holder("multisig", members=["0x" + "01" * 20, "0x" + "02" * 20], threshold=2, source="safe")),
+            "msw": ({("0xS", "0x" + H["getOwners"]): owners, ("0xS", "0x" + H["required"]): w(1)}, "0xS",
+                    core._holder("multisig", members=["0x" + "01" * 20, "0x" + "02" * 20], threshold=1, source="multisigwallet")),
+            "timelock": ({("0xS", "0x" + H["getMinDelay"]): w(43200)}, "0xS",
+                         core._holder("timelock", min_delay_s=43200, source="getMinDelay()")),
+            "owned": ({("0xS", "0x" + H["owner"]): "0x" + "00" * 12 + "0e" * 20}, "0xS",
+                      core._holder("contract", owner="0x" + "0e" * 20, source="owner()")),
+            "bare": ({}, "0xS", core._holder("contract", reason="no multisig, timelock or owner() interface answered")),
+        }
+        for name, (calls, addr, want) in cases.items():
+            with self.subTest(name):
+                core.rpc = self._rpc_with(calls=calls)
+                self.assertEqual(core.evm_holder("ethereum", addr, "0x1"), want)
+        core.rpc = self._rpc_with(code={"0xK": "0x"})
+        self.assertEqual(core.evm_holder("ethereum", "0xK", "0x1")["kind"], "eoa")
+        # threshold out of range, or a getOwners answer that is not an address[]: not a multisig (closed)
+        for bad in ({("0xS", "0x" + H["getOwners"]): owners, ("0xS", "0x" + H["getThreshold"]): w(3)},
+                    {("0xS", "0x" + H["getOwners"]): owners, ("0xS", "0x" + H["getThreshold"]): w(0)},
+                    {("0xS", "0x" + H["getOwners"]): owners[:-2], ("0xS", "0x" + H["getThreshold"]): w(1)},
+                    {("0xS", "0x" + H["getOwners"]): "0x" + "20".rjust(64, "0") + "0".rjust(64, "0"), ("0xS", "0x" + H["getThreshold"]): w(1)}):
+            core.rpc = self._rpc_with(calls=bad)
+            self.assertNotEqual(core.evm_holder("ethereum", "0xS", "0x1")["kind"], "multisig")
+        # one level: the owner of a contract holder gets its own entry, its own owner is not followed
+        core.rpc = self._rpc_with(calls={("0xS", "0x" + H["owner"]): "0x" + "00" * 12 + "0e" * 20,
+                                         ("0x" + "0e" * 20, "0x" + H["owner"]): "0x" + "00" * 12 + "0f" * 20})
+        pw = {p: core._power("not_evaluated", reason="t") for p in core.POWERS}
+        pw["owner"] = core._power("present", "0xS", "owner()")
+        hd = core._holders(pw, lambda h: core.evm_holder("ethereum", h, "0x1"))
+        self.assertEqual(sorted(hd), sorted(["0xS", "0x" + "0e" * 20]))
+        self.assertEqual(hd["0x" + "0e" * 20]["owner"], "0x" + "0f" * 20)
+        self.assertIsNone(agents.validate_control({"spec": core.CONTROL_SPEC, "powers": pw, "holders": hd}))
+
+    def test_holder_node_error_is_not_evaluated(self):
+        """CR-17"""
+        def rpc(chain, method, params, timeout=25):
+            raise core.RpcError("header not found")
+        core.rpc = rpc
+        pw = {p: core._power("not_evaluated", reason="t") for p in core.POWERS}
+        pw["owner"] = core._power("present", "0xS", "owner()")
+        hd = core._holders(pw, lambda h: core.evm_holder("ethereum", h, "0x1"))
+        self.assertEqual(hd["0xS"]["kind"], "not_evaluated")
+        self.assertIn("header not found", hd["0xS"]["reason"])
+
+    def test_zero_owner_is_absent(self):
+        """CR-6"""
+        core.rpc = self._rpc_with()
+        c = core.evm_control("ethereum", "0xT", "0x1", {"implementation_slot": None}, "0x" + "00" * 20)
+        self.assertEqual(c["powers"]["owner"]["status"], "absent")
+
+    def test_solana_powers_and_squads(self):
+        """CR-6 CR-8 CR-9 CR-10 CR-11 CR-15: SILV's mint as read on 2026-11-13; its freeze authority and permanent
+        delegate are the vault of the Squads multisig, decoded from the account's real bytes."""
+        v = _vector("silv_squads_20260911")
+        info = v["mint_account_today"]["value"]["data"]["parsed"]["info"]
+        ext = {e["extension"]: e.get("state") for e in info.get("extensions", [])}
+        raw = __import__("base64").b64decode(v["multisig_account_today_base64"])
+
+        def acc(address):
+            return (core.SQUADS_V4, raw) if address == v["multisig"] else ("11111111111111111111111111111111", b"")
+        core._sol_account = acc
+        declared = {v["vault"]: {"multisig": v["multisig"], "vault_index": 0}}
+        c = core.solana_control(info, ext, declared)
+        self.assertIsNone(agents.validate_control(c))
+        self.assertEqual((c["powers"]["mint"]["holder"], c["powers"]["freeze"]["holder"], c["powers"]["seize"]["holder"],
+                          c["powers"]["pause"]["status"], c["powers"]["upgrade"]["status"]),
+                         (info["mintAuthority"], v["vault"], v["vault"], "absent", "not_evaluated"))
+        h = c["holders"][v["vault"]]
+        self.assertEqual((h["kind"], h["threshold"], len(h["members"]), h["min_delay_s"]), ("multisig", 3, 7, 0))
+        self.assertEqual(c["holders"][info["mintAuthority"]]["kind"], "account")
+        # not declared: a vault is a key or a PDA, not read further
+        self.assertEqual(core.solana_control(info, ext)["holders"][v["vault"]]["kind"], "account")
+        # declared, but the multisig does not derive this vault: not evaluated, said
+        wrong = {v["vault"]: {"multisig": v["multisig"], "vault_index": 1}}
+        self.assertEqual(core.solana_control(info, ext, wrong)["holders"][v["vault"]]["kind"], "not_evaluated")
+        # the multisig account itself as a holder
+        self.assertEqual(core.solana_holder(v["multisig"])["kind"], "multisig")
+        with self.assertRaises(ValueError):
+            core.decode_squads_multisig(b"\0" * 8 + raw[8:])                              # wrong discriminator
+
+    def test_pda_derivation_positive_control(self):
+        """CR-15: the derivation must refuse on-curve points: the ed25519 base point is on the curve."""
+        base_y = (4 * pow(5, 2 ** 255 - 19 - 2, 2 ** 255 - 19)) % (2 ** 255 - 19)
+        self.assertTrue(core._on_ed25519_curve(base_y.to_bytes(32, "little")))
+        v = _vector("silv_squads_20260911")
+        self.assertFalse(core._on_ed25519_curve(core.b58decode(v["vault"])))
+        self.assertEqual(core.b58encode(core.b58decode(v["multisig"])), v["multisig"])
+
+    def test_aptos_and_stellar_records(self):
+        """CR-16 CR-9 CR-10"""
+        st = core.account_control("signers-sha256:ab", "issuer signers fingerprint",
+                                  core._power("present", "GISSUER", "flags.auth_revocable"),
+                                  core._power("absent", source="flags.auth_clawback_enabled"))
+        self.assertIsNone(agents.validate_control(st))
+        self.assertEqual({h: e["kind"] for h, e in st["holders"].items()}, {"GISSUER": "account", "signers-sha256:ab": "account"})
+        ap = core.account_control("0x4de5", "object owner")
+        self.assertIsNone(agents.validate_control(ap))
+        self.assertEqual(ap["powers"]["mint"]["status"], "not_evaluated")
+
+    def test_stellar_reader_freeze_from_flags(self):
+        """CR-9 CR-10 CR-16: the Stellar reader turns the asset flags into freeze / seize powers."""
+        e = [x for x in core.NONEVM_REGISTRY if x["chain"] == "stellar"]
+        saved = core._get_json
+
+        def with_flags(flags):
+            base = TestDiamondStellarMultiToken._xlm()
+
+            def get(url, timeout=25):
+                out = base(url, timeout)
+                if "/assets?" in url and "BENJI" in url:
+                    out["_embedded"]["records"][0]["flags"] = flags
+                return out
+            return get
+        try:
+            got = {}
+            for name, flags in (("missing", {"auth_required": True}),
+                                ("set", {"auth_required": True, "auth_revocable": True, "auth_clawback_enabled": False})):
+                core._get_json = with_flags(flags)
+                got[name] = core.read_stellar(e, now=1_000_000 + 100)["tokens"][0]["control"]
+        finally:
+            core._get_json = saved
+        for c in got.values():
+            self.assertIsNone(agents.validate_control(c))
+        self.assertEqual((got["missing"]["powers"]["freeze"]["status"], got["missing"]["powers"]["seize"]["status"]),
+                         ("not_evaluated", "not_evaluated"))
+        self.assertEqual((got["set"]["powers"]["freeze"]["status"], got["set"]["powers"]["freeze"]["holder"],
+                          got["set"]["powers"]["seize"]["status"]), ("present", e[0]["address"], "absent"))
+
+    def test_power_and_holder_constructors_are_closed(self):
+        """CR-5 CR-13"""
+        with self.assertRaises(ValueError):
+            core._power("maybe")
+        with self.assertRaises(ValueError):
+            core._power("present")                                   # present without a holder
+        with self.assertRaises(ValueError):
+            core._power("not_evaluated")                             # not evaluated without a reason
+        with self.assertRaises(ValueError):
+            core._holder("person")
+
+    def test_compared_fields_only(self):
+        """CR-18 CR-19 P8: a different source or reason is not a change; an unchanged one-key owner is not raised."""
+        a = _ctl("0x" + "aa" * 20)
+        b = copy.deepcopy(a)
+        b["powers"]["owner"]["source"] = "another explanation"
+        b["powers"]["mint"]["reason"] = "another reason"
+        b["holders"]["0x" + "aa" * 20]["source"] = "other"
+        t = lambda c: dict(_token("ethereum", 1.0, owner="0x" + "aa" * 20), control=c)     # noqa: E731
+        self.assertEqual(agents._agent_control(_one_chain("ethereum", [t(b)]), _one_chain("ethereum", [t(a)]))[0], "QUIET")
+        for change in ({"threshold": 2, "members": ["0x1", "0x2"], "kind": "multisig"},):
+            c = copy.deepcopy(a)
+            c["holders"]["0x" + "aa" * 20].update(change)
+            self.assertEqual(agents._agent_control(_one_chain("ethereum", [t(c)]), _one_chain("ethereum", [t(a)]))[0], "ELEVATED")
+
+    def test_power_and_holder_changes(self):
+        """P1 P2: each compared field of each power and holder, changed alone, raises the posture."""
+        ms = core._holder("multisig", members=["0x1", "0x2", "0x3"], threshold=2, source="safe")
+        tl = core._holder("timelock", min_delay_s=86400, source="getMinDelay()")
+        base = _ctl("0xM", holders={"0xM": ms, "0xT": tl}, upgrade=core._power("present", "0xT", "eip1967.admin"))
+        self.assertIsNone(agents.validate_control(base))
+        t = lambda c: dict(_token("ethereum", 1.0, owner="0xM"), control=c)                 # noqa: E731
+        edits = [("powers", "owner", {"holder": "0xN"}), ("powers", "upgrade", {"status": "absent", "holder": None, "source": "x"}),
+                 ("holders", "0xM", {"members": ["0x1", "0x2", "0x4"]}), ("holders", "0xM", {"threshold": 1}),
+                 ("holders", "0xT", {"min_delay_s": 0})]
+        for part, key, upd in edits:
+            with self.subTest(part=part, key=key, upd=upd):
+                c = copy.deepcopy(base)
+                c[part][key].update(upd)
+                if part == "powers" and key == "owner":
+                    c["holders"]["0xN"] = c["holders"].pop("0xM")
+                if part == "powers" and key == "upgrade":
+                    c["holders"].pop("0xT")
+                self.assertIsNone(agents.validate_control(c))
+                v = agents._agent_control(_one_chain("ethereum", [t(c)]), _one_chain("ethereum", [t(base)]))
+                self.assertEqual(v[0], "ELEVATED", v)
+
+    def test_malformed_records_are_refused(self):
+        """CR-2 CR-3 CR-4 CR-5 CR-12 CR-13 P6: generative — every mutation that breaks the specification, at every
+        level, is refused and raises the posture; the unmutated record (a real one, StablR's) passes."""
+        import random
+        good = _vector("stablr_usdr_20260524")["reading"]["after"]["control"]
+        self.assertIsNone(agents.validate_control(good))                     # positive control
+
+        def paths(o, pre=()):
+            yield pre
+            if isinstance(o, dict):
+                for k in o:
+                    yield from paths(o[k], pre + (k,))
+            elif isinstance(o, list):
+                for i, x in enumerate(o):
+                    yield from paths(x, pre + (i,))
+
+        def get(o, p):
+            for k in p:
+                o = o[k]
+            return o
+        rng, refused, tried = random.Random(20261113), 0, 0
+        all_paths = list(paths(good))
+        dict_paths = [p for p in all_paths if isinstance(get(good, p), dict)]
+        wrong_values = [None, 0, -1, True, 1.5, "", "x", [], {}, ["b", "a"]]
+        for i in range(3000):
+            c = copy.deepcopy(good)
+            kind = rng.randrange(6)
+            if kind == 0:                                                     # an unknown key at any object level
+                get(c, rng.choice(dict_paths))["unknown_%d" % i] = rng.choice(wrong_values)
+            elif kind == 1:                                                   # a key removed at any object level
+                p = rng.choice([p for p in dict_paths if get(c, p)])
+                d = get(c, p)
+                k = rng.choice(sorted(d, key=str))
+                del d[k]
+            elif kind == 2:                                                   # a vocabulary value outside its list
+                p = rng.choice([p for p in all_paths if p and p[-1] in ("status", "kind", "spec")])
+                get(c, p[:-1])[p[-1]] = rng.choice(["Present", "unknown", "", None, "rwawatch-control/2", 1])
+            elif kind == 3:                                                   # a wrong type where a value is closed
+                p = rng.choice([p for p in all_paths if p and p[-1] in ("members", "threshold", "min_delay_s", "holder", "reason", "source", "owner")])
+                cur = get(c, p)
+                choices = [w for w in wrong_values if w != cur and not (p[-1] in ("reason", "source", "owner", "holder", "min_delay_s", "members", "threshold") and w is None)]
+                get(c, p[:-1])[p[-1]] = rng.choice(choices)
+            elif kind == 4:                                                   # a holder that holds no power
+                c["holders"]["0x" + "99" * 20] = core._holder("eoa", source="x")
+            else:                                                             # the whole record replaced
+                c = rng.choice([None, [], "control", {"spec": core.CONTROL_SPEC}, {}])
+            if c == good:
+                continue
+            tried += 1
+            err = agents.validate_control(c)
+            if err is None:
+                # a mutation can land on a value the specification allows (a string source replaced by another string):
+                # then the record is still well-formed — check it really is, by the rules written in CR-5 / CR-13
+                self.assertEqual(kind, 3, (kind, c))
+                continue
+            refused += 1
+            t = dict(_token("ethereum", 1.0), control=c)
+            self.assertEqual(agents._agent_control(_one_chain("ethereum", [t]))[0], "ELEVATED")
+        self.assertGreater(refused, 2500)
+        self.assertGreater(tried, 2900)
+
+    def test_missing_control_in_the_current_snapshot_is_refused(self):
+        """CR-1 P6"""
+        t = _token("ethereum", 1.0)
+        del t["control"]
+        v = agents._agent_control(_one_chain("ethereum", [t]))
+        self.assertEqual(v[0], "ELEVATED")
+        self.assertIn("no control record", v[1])
+
+
+class TestSearchTriState(unittest.TestCase):
+    """The first cycle of 13/11/2026 said «search blind (control failed)» for 8 fund/chain pairs: 3 had no explorer
+    configured (avalanche, base), 4 were refused by the explorer (arbitrum, polygon: HTTP 403 on every term), 1 was a
+    real blind search (USYC on BNB Chain). S1 S2 S3."""
+
+    def _discover(self, chain, status, hits):
+        orig_s, orig_c = core.search_same_named, core.classify_unregistered
+        core.search_same_named = lambda ch: (status, hits)
+        core.classify_unregistered = lambda ch, a, b, f="BUIDL": {"address": a, "class": "x"}
+        try:
+            return core.discover(chain, "0x10", [e["address"] for e in core.REGISTRY if e["chain"] == chain])
+        finally:
+            core.search_same_named, core.classify_unregistered = orig_s, orig_c
+
+    def test_not_searched_is_null_not_false(self):
+        """S1"""
+        d = self._discover("avalanche", "not searched (no explorer search configured)", {})
+        self.assertEqual(set(d["search_control"].values()), {None})
+        self.assertNotIn("search control FAILED", d["status"])
+
+    def test_explorer_failing_every_term_is_not_searched(self):
+        """S1: urllib raises HTTPError 403 on every term (the explorer's bot challenge, measured 13/11/2026)."""
+        import urllib.error
+        saved = core._http_json
+
+        def refuse(url, timeout=25):
+            raise urllib.error.HTTPError(url, 403, "Forbidden", {}, None)
+        core._http_json = refuse
+        try:
+            status, hits = core.search_same_named("arbitrum")
+        finally:
+            core._http_json = saved
+        self.assertTrue(status.startswith("not searched (the explorer failed every term"), status)
+        self.assertIn("HTTPError 403", status)
+        self.assertEqual(hits, {})
+        d = self._discover("arbitrum", status, hits)
+        self.assertEqual(set(d["search_control"].values()), {None})
+
+    def test_council_names_blind_and_unsearched_apart(self):
+        """S2 S3"""
+        s = _snap({"bsc": 1, "avalanche": 1})
+        s["signal"]["chains"][0]["discovery"].update(search_control={"USYC": False, "BUIDL": True}, status="searched")
+        s["signal"]["chains"][1]["discovery"].update(search_control={"BUIDL": None}, status="not searched (no explorer search configured)")
+        why = agents._agent_imitations(s, copy.deepcopy(s))[1]
+        self.assertIn("search blind (control failed) for ['bsc/USYC']", why)
+        self.assertIn("not searched: avalanche (not searched (no explorer search configured))", why)
+        prev = copy.deepcopy(s)
+        prev["signal"]["chains"][1]["discovery"]["search_control"] = {"BUIDL": True}
+        self.assertEqual(agents._agent_imitations(s, prev)[0], "ELEVATED")       # S3: true -> null is sight lost
 
 
 if __name__ == "__main__":
