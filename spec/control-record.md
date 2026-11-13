@@ -36,6 +36,12 @@ code equal the ones written here. Its count of orphans must be 0.
   - `not_evaluated`: `holder` is null; `reason` says why (no standard interface on that chain, the interface did not
     answer, a gate kept in code that is not read). A power is never `absent` because it could not be read.
   - `reason` is null for `present` and `absent`, a non-empty string for `not_evaluated`.
+  - Every address in the record (each `holder`, each key of `holders`, each holder's `owner` and `members`) is written
+    as the chain of the token writes it, and the council checks the form: EVM `0x` and 40 lower-case hex digits;
+    Solana base58 of exactly 32 bytes, in its canonical spelling; Aptos `0x` and 1 to 64 lower-case hex digits; Stellar
+    an account (`G` and 55 base32 characters) or, for the owner power, the signers fingerprint (`signers-sha256:` and
+    64 lower-case hex digits). Any other form (upper case, EIP-55 mixed case, a trailing newline, an invalid base58
+    character, a wrong length) is refused (P6). The Stellar form is a shape: the account's checksum is not verified.
 
 What each chain reads (version 1):
 
@@ -70,8 +76,10 @@ What each chain reads (version 1):
   gives the holder (checked at every cycle; `source` `squads-v4 vault <index> of <multisig>`); otherwise `account` with
   `reason` `a key or a program-derived address: who signs for it is not read`.
 - **[CR-16]** Aptos and Stellar holders: `account` (the Stellar signers are already fingerprinted in the `owner` power).
-- **[CR-17]** A holder that could not be read (the call failed for a reason other than a revert) is `not_evaluated` with
-  the reason; the chain stays assessed only if its other gates passed.
+- **[CR-17]** EVM: a holder whose call failed with a JSON-RPC error other than a revert is `not_evaluated` with the
+  reason, and the chain stays assessed only if its other gates passed. A transport error (network, TLS, timeout) while
+  reading an EVM holder, and any failure while reading a Solana holder, makes the whole chain NOT ASSESSED, as any other
+  failed read of that chain does.
 
 ## 4. Fields the council compares
 

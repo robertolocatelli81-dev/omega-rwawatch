@@ -2,13 +2,14 @@
 
 **Who can mint, freeze, seize, pause or upgrade a tokenized fund you hold — and did that change since yesterday?**
 
-A tokenized money-market fund or ETF lives in a contract somebody else controls. In the incidents below the losses came
-through those controls, not through a bug in the token code: on 24/05/2026 the multisig that is the StablR tokens' `owner()` got a new
-owner list while `owner()` itself stayed the same; on 11/09/2026 the multisig behind SILV's freeze authority and permanent
-delegate (one address holding both) was compromised; in March 2025 Zoth's proxy got a new implementation. Where a
-lender checks this, it is by hand and once: LlamaRisk's assessment of HINC for Aave Horizon (15/09/2026) made a missing
-on-chain timelock a blocking condition. Banks holding tokenized assets are asked to assess them «on an ongoing
-basis» and to document it (Basel SCO60.20).
+A tokenized money-market fund or ETF lives in a contract somebody else controls. In three of the cases below the losses
+came through those controls, not through a bug in the token code: on 23/05/2026 at 23:33 UTC (block 25161285) the
+multisig that is the StablR tokens' `owner()` got a new owner list while `owner()` itself stayed the same; on 11/09/2026
+Dominion reported a compromised multisig wallet (cryptoticker.io, 13/09/2026), and the Squads multisig behind SILV's
+freeze authority and permanent delegate (one address holding both) changed its members from 03:43 UTC; on 21/03/2025
+Zoth's proxy got a new implementation. The fourth case is not an incident: LlamaRisk's assessment of HINC for Aave
+Horizon (15/09/2026) made an on-chain timelock on the address that controls the token a prerequisite, to be verified
+before activation, and on 05/10/2026 the token's `owner()` moved to a TimelockController.
 
 OMEGA-RWAWatch keeps that check as a record: for each watched token, at a recorded block, **who holds each power and
 under which guard** — one key, a multisig with its members and threshold, a timelock with its delay — in a hash-chained
@@ -16,19 +17,22 @@ memory anyone can recompute offline, and a council that raises the posture when 
 
 ## What it would have said (measured 13/11/2026, from public data)
 
-The four incidents above, rebuilt at the block before and after the change (`tests/vectors/`; three recorded from two
-public archive nodes that gave identical answers, SILV rebuilt from the multisig's public transactions with its end
-state equal to the account today), run through the council of 0.2.0 (`cfa5f39`) and of this version:
+The four cases above, rebuilt at a block before and the block of the change (`tests/vectors/`; three recorded from two
+public archive nodes that gave identical answers; SILV rebuilt from the multisig's public transactions — 309 of 2,157
+replayed, the 1,848 of the clawback window 11/09 13:19 – 12/09 09:21 UTC left out, after the change shown here — with
+its end state equal to the account today), run through the council of 0.2.0 (`cfa5f39`) and of this version:
 
-| Incident | Change, at the block | 0.2.0 | 0.3.0 | What the record says |
+| Case | Change, at the block | 0.2.0 | 0.3.0 | What the record says |
 |---|---|---|---|---|
-| StablR USDR, 24/05/2026 | block 25161284 → 25161285 | QUIET | **ELEVATED** | `owner()` the same MultiSigWallet `0xf453…82f3`; its owners `0xc73f…`, `0xd4b6…` → plus `0xd467…6cd1`, threshold 1 |
+| StablR USDR, 23/05/2026 23:33 UTC | block 25161284 → 25161285 | QUIET | **ELEVATED** | `owner()` the same MultiSigWallet `0xf453…82f3`; its owners `0xc73f…`, `0xd4b6…` → plus `0xd467…6cd1`, threshold 1 |
 | SILV (Solana), 11/09/2026 | slot 446057370 → 446057560 | QUIET | **ELEVATED** | freeze authority and permanent delegate = Squads vault `FqFN…vzZ3`; its multisig (3 of 5) gains a member at 03:43 UTC |
-| Zoth, 21/03/2025 | block 22094139 → 22094140 | ELEVATED | ELEVATED | implementation of the proxy replaced; the upgrade gate is in code: `not_evaluated` |
-| HINC | block 26126964 → 26126965 | ELEVATED | ELEVATED | `owner()` from one key (no code) to a TimelockController, `getMinDelay()` = 43200 s |
+| Zoth, 21/03/2025 | block 22094139 → 22094140 | ELEVATED | ELEVATED | implementation of the proxy replaced; the upgrade gate is in code: `not_evaluated` (the sub-vault is not a token: both versions also say «no symbol or supply readable» at both blocks) |
+| HINC, 05/10/2026 (not an incident) | block 26126964 → 26126965 | ELEVATED | ELEVATED | `owner()` from one key (no code) to a TimelockController, `getMinDelay()` = 43200 s |
 
-SILV: the theft transaction (02:23:33 UTC) was approved by members already in the multisig, so no state changed then;
-what the record sees is the multisig changing afterwards. A record of state shows changes of control, not their use.
+SILV: at 02:23:33 UTC a vault transaction of that multisig, approved by three members already in it, moved 5 SOL out
+of the vault (`3V2U6E2f…`); no control state changed then, and which transactions of that night were the attacker's is
+not established here. What the record sees is the multisig changing its members from 03:43 UTC. A record of state
+shows changes of control, not their use.
 
 Also measured on 0.2.0 with the probe of 13/11/2026: a change of Solana freeze authority, of permanent delegate, and
 an ETF mint / freeze authority that is no longer the issuer's all came back `QUIET` (the ETF layer was written to the
@@ -49,10 +53,10 @@ A total supply is a token count: not a fund's assets, not an ETF's NAV.
 | BENJI | Franklin Templeton (FOBXX) | Ethereum, Polygon, Arbitrum, Avalanche, Base, Solana, Aptos, Stellar |
 | USYC | Circle | Ethereum, BNB, Solana |
 
-## The first control record of the watched tokens (13/11/2026, 16:0x CET, not written to the memory)
+## The first control record of the watched tokens (13/11/2026, not written to the memory)
 
-One full snapshot with this version, all ten chains of the fund layer and the four of the ETF layer assessed, 30 control
-records, 0 refused by the specification. Compared with the production memory's last cycle, the council said
+One full snapshot with this version, all ten chains of the fund layer and the four of the ETF layer assessed, 29 control
+records (22 fund tokens, 7 ETF tokens), 0 refused by the specification. Compared with the production memory's last cycle, the council said
 «first control reading» for every token and raised nothing for it. What the records say:
 
 | Token(s) | Owner / admin | Its guard |
@@ -293,8 +297,8 @@ same pack with one digit of the body changed fails `pack-sha3`. A cycle with dis
   upgrade gate kept in code (UUPS, Diamond, custom proxies) is `not_evaluated` too.
 - A holder with no code is one key on chain, not one person; a multisig's members are keys, not people. A Solana vault
   is read through its Squads multisig only where the registry declares it and the vault derives from it.
-- It records control state, not its use: a key that acts without changing any control (as at SILV's 02:23 UTC
-  transaction) changes nothing here.
+- It records control state, not its use: a key that acts without changing any control (as at SILV's vault
+  transaction of 02:23:33 UTC) changes nothing here.
 - Same-named tokens: it does not tell an imitation from a wrapper. The explorer search covers the chains where an
   explorer answers; on 13/11/2026 Arbitrum and Polygon's Blockscout refused every query (HTTP 403), and Avalanche and
   Base have no search configured: «not searched», said per cycle.

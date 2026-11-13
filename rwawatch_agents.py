@@ -10,11 +10,12 @@ judgement on the fund.
 """
 
 import os
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from rwawatch import (CONTROL_KEYS, CONTROL_SPEC, HOLDER_KEYS, HOLDER_KINDS, POWER_KEYS,  # noqa: E402
-                      POWER_STATUS, POWERS)
+                      POWER_STATUS, POWERS, b58decode, b58encode)
 
 POSTURES = ("QUIET", "ELEVATED", "ALERT")
 
@@ -134,7 +135,12 @@ def _agent_imitations(snapshot, previous=None):
                 for f, ok in ((c.get("discovery") or {}).get("search_control") or {}).items()}
     lost = sorted(f"{c}/{f}" for (c, f), ok in ctl(snapshot).items() if ok is not True and ctl(previous).get((c, f)) is True)
     if lost:                                                                     # [S3]
-        return "ELEVATED", f"explorer search no longer finds the registered token of: {lost}"
+        now_ctl = ctl(snapshot)
+        gone = [x for x in lost if now_ctl.get(tuple(x.split("/", 1))) is False]
+        unsearched_now = [x for x in lost if x not in gone]                      # [S2] null: not searched this cycle
+        return "ELEVATED", "; ".join(
+            ([f"explorer search no longer finds the registered token of: {gone}"] if gone else [])
+            + ([f"found by the explorer search last cycle, not searched this cycle: {unsearched_now}"] if unsearched_now else []))
     # [S2] blind = the explorer answered and the registered token is not in its results; not searched = no explorer, or
     # it failed every term: two different facts, named apart
     blind = sorted(f"{c}/{f}" for (c, f), ok in ctl(snapshot).items() if ok is False)
@@ -146,9 +152,29 @@ def _agent_imitations(snapshot, previous=None):
 
 
 # ───────────────────────── control record (spec/control-record.md, rwawatch-control/1) ──
-def validate_control(c):
+def address_ok(chain, a):
+    """[CR-5] `a` is written as the chain of the token writes an address: EVM `0x` + 40 lower-case hex; Solana base58 of
+    32 bytes, canonical; Aptos `0x` + 1 to 64 lower-case hex; Stellar an account `G` + 55 base32 characters, or the
+    owner's `signers-sha256:` + 64 lower-case hex. re.fullmatch, so a trailing newline is not accepted."""
+    if not isinstance(a, str):
+        return False
+    if chain == "solana":
+        try:
+            b = b58decode(a)
+        except ValueError:
+            return False
+        return len(b) == 32 and b58encode(b) == a
+    if chain == "aptos":
+        return re.fullmatch(r"0x[0-9a-f]{1,64}", a) is not None
+    if chain == "stellar":
+        return re.fullmatch(r"G[A-Z2-7]{55}|signers-sha256:[0-9a-f]{64}", a) is not None
+    return re.fullmatch(r"0x[0-9a-f]{40}", a) is not None
+
+
+def validate_control(c, chain=None):
     """[CR-2..CR-17, P6] None when `c` is a well-formed control record, else the first reason it is not. Closed: an
-    unknown spec, an unknown or missing key, a value outside its vocabulary is a reason."""
+    unknown spec, an unknown or missing key, a value outside its vocabulary is a reason; with `chain`, an address not
+    written as that chain writes it [CR-5] is a reason too (the council always passes the chain)."""
     if not isinstance(c, dict) or set(c) != set(CONTROL_KEYS):
         return f"control keys {sorted(c, key=str) if isinstance(c, dict) else type(c).__name__} are not {list(CONTROL_KEYS)}"
     if c["spec"] != CONTROL_SPEC:
@@ -214,6 +240,11 @@ def validate_control(c):
             return f"holder {h}: a timelock needs a non-negative min_delay_s"
         if k == "not_evaluated" and not e["reason"]:
             return f"holder {h}: not_evaluated needs a reason"
+    if chain is not None:                                                                   # [CR-5]
+        for h, e in hd.items():
+            for a in [h] + ([e["owner"]] if e["owner"] is not None else []) + list(e["members"] or []):
+                if not address_ok(chain, a):
+                    return f"address {a!r} is not written as {chain} writes an address"
     return None
 
 
@@ -249,7 +280,7 @@ def _agent_control(snapshot, previous=None):
             if p is not None and f in t and f in p and t[f] != p[f]:
                 changes.append(f"{name}: {f} {p[f]} -> {t[f]}")
         c = t.get("control")
-        err = "no control record" if c is None else validate_control(c)                  # [CR-1, P6]
+        err = "no control record" if c is None else validate_control(c, key[1])                  # [CR-1, P6]
         if err:
             bad.append(f"{name}: {err}")
             continue
@@ -259,7 +290,7 @@ def _agent_control(snapshot, previous=None):
         if pc is None:                                                                    # [P7]
             first.append(name)
             continue
-        perr = validate_control(pc)
+        perr = validate_control(pc, key[1])
         if perr:
             bad.append(f"{name}: baseline control record refused ({perr})")
             continue

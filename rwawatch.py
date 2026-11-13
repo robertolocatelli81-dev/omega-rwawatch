@@ -13,7 +13,7 @@ the node's identity and freshness and runs a POSITIVE CONTROL on the same node: 
 or a PancakeSwap LP on BNB), or the non-EVM equivalent, must be seen as expected; if not, that chain is reported as
 NOT ASSESSED, never as clean.
 
-Independent project, not affiliated with, reviewed or endorsed by BlackRock, Securitize, J.P. Morgan, Franklin
+Not affiliated with, reviewed or endorsed by BlackRock, Securitize, J.P. Morgan, Franklin
 Templeton or Circle; not an official NAV/price/AUM feed; not financial advice.
 
 Scope: this VERIFIES and RECORDS public on-chain facts at a block and tracks them over time (the hash-chained
@@ -194,7 +194,7 @@ SIG_NEEDLES = ("ed25519", "secp256k1", "multi_ed25519", "bls12381")
 # Same method — every address is READ on-chain at a block, the control key (owner() on EVM, mint/freeze authority on
 # Solana) is compared to the one recorded for the issuer, and the token's control SURFACE is fingerprinted. `status`
 # is the ISSUER's DECLARED state (listed vs redemption_only), marked declared-with-date, NEVER measured on-chain.
-# Honest scope: total supply is a token count, NOT AUM and NOT the ETF's NAV; this VERIFIES on-chain facts, it does
+# Scope: total supply is a token count, NOT AUM and NOT the ETF's NAV; this VERIFIES on-chain facts, it does
 # not value anything. Of the seven contracts registered on 2026-09-28, three are redemption-only per their issuer. The
 # OpenSea-listed same-named "QQQX" AAmD… (legacy Token program, no authorities) is not tied to the xStocks keys and is
 # NOT registered (checked by hand 2026-09-28; this layer runs no search).

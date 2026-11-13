@@ -11,7 +11,7 @@ state must equal the account as decoded today (members, threshold, time lock); t
 
 Network (api.mainnet-beta.solana.com, read-only; about 5 s per transaction on 2026-11-13). Transactions already in
 CACHE_DIR (one JSON per signature) are not fetched again. --skip-from/--skip-to leave out a time window (the bulk
-clawback batches of 11-12/09/2026, 1,846 transactions): the end-state control then also tells whether the window held a
+clawback batches of 11-12/09/2026, 1,848 transactions): the end-state control then also tells whether the window held a
 configuration change that was not undone.
 """
 import base64

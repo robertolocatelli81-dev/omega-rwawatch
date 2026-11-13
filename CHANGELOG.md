@@ -8,7 +8,7 @@
   (with the reason; never `absent` because it could not be read). Each holder is classified at the same block: one key
   (no code), multisig (Safe `getOwners` + `getThreshold`, Gnosis MultiSigWallet `required`; Squads v4 on Solana),
   timelock (`getMinDelay`), or a contract with its `owner()` followed one level. The record is closed: an unknown key,
-  value or spec version is refused by the council.
+  value or spec version, or an address not written as the token's chain writes it, is refused by the council.
 - **Council.** `_agent_control` raises the posture when a power changes hands, or when a holder's members, threshold,
   delay or owner change — also while the token's `owner()` stays the same; it compares too the fields that carried
   control before this version (Solana freeze authority, permanent delegate, transfer-hook program; Stellar flags; the
@@ -25,7 +25,7 @@
   On 13/11/2026 the council said «search blind (control failed)» for eight fund/chain pairs: three had no explorer
   configured (Avalanche, Base), four were refused by the explorer (Arbitrum and Polygon Blockscout answered HTTP 403 to
   every term), one was a blind search (USYC on BNB Chain). Optimism's explorer is called at the address its 301 points to.
-- `tools/spec_orphans.py` (0 orphans between specification, code and tests); `tools/ablate_guards.py` 72 mutations
+- `tools/spec_orphans.py` (0 orphans between specification, code and tests); `tools/ablate_guards.py` 80 mutations
   (33 before), 0 surviving; `USER_AGENT` `omega-rwawatch/0.3`; `LICENSE` and `pyproject.toml` both 0.3.0 (the
   `LICENSE` said 0.1.0 while the package said 0.2.0).
 - BUIDL on BNB Chain: BlackRock's page lists the address (raw HTML read 13/11/2026); the registry and the README said

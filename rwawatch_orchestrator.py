@@ -9,7 +9,7 @@ threshold from the history of run-to-run moves (a new threshold is committed ONL
 separation; otherwise the incumbent is held), append the cycle to the hash-chained memory, and — if the optional
 `omega-evidence` package is installed — write an Ed25519-signed, ledger-anchored evidence pack of the cycle.
 
-Honest: the threshold is a DETECTION threshold on observed moves; nothing here forecasts supply or values the fund.
+Scope: the threshold is a DETECTION threshold on observed moves; nothing here forecasts supply or values the fund.
 
 Run:  python3 rwawatch_orchestrator.py
 """

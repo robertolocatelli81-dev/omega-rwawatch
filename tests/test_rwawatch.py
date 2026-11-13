@@ -1080,6 +1080,7 @@ class TestCouncilControlProbe(unittest.TestCase):
     B = {"token": "X", "address": "M", "symbol": "X", "decimals": 6, "total_supply": 100.0, "owner": "K",
          "expected_owner": "K", "freeze_authority": "F", "permanent_delegate": "D", "implementation_code_sha256": "aa",
          "eip712_entry_points": []}
+    SOL_K = core.b58encode(bytes(range(1, 33)))           # a canonical Solana address (CR-5), for the control record
 
     def _s(self, t, etf=None):
         s = _one_chain("solana", [t])
@@ -1087,7 +1088,7 @@ class TestCouncilControlProbe(unittest.TestCase):
         return s
 
     def _j(self, change, with_control=True):
-        b = dict(self.B, control=_ctl("K")) if with_control else dict(self.B)
+        b = dict(self.B, control=_ctl(self.SOL_K)) if with_control else dict(self.B)
         return agents.judge(self._s(dict(b, **change)), self._s(b))
 
     def test_probe_positive_controls_still_elevated(self):
@@ -1099,7 +1100,7 @@ class TestCouncilControlProbe(unittest.TestCase):
         for wc in (True, False):
             for field in ("freeze_authority", "permanent_delegate"):
                 with self.subTest(field=field, control=wc):
-                    b = dict(self.B, control=_ctl("K"))
+                    b = dict(self.B, control=_ctl(self.SOL_K))
                     prev = b if wc else dict(self.B)
                     v = agents.judge(self._s(dict(b, **{field: "Z"})), self._s(prev))
                     self.assertEqual(_vote(v, "_agent_control")["posture"], "ELEVATED")
@@ -1107,7 +1108,7 @@ class TestCouncilControlProbe(unittest.TestCase):
 
     def test_first_control_reading_is_said_not_raised(self):
         """P7"""
-        v = agents.judge(self._s(dict(self.B, control=_ctl("K"))), self._s(dict(self.B)))
+        v = agents.judge(self._s(dict(self.B, control=_ctl(self.SOL_K))), self._s(dict(self.B)))
         self.assertEqual(v["posture"], "QUIET", v)
         self.assertIn("first control reading", _vote(v, "_agent_control")["why"])
 
@@ -1117,7 +1118,7 @@ class TestCouncilControlProbe(unittest.TestCase):
             {"token": "SPYx", "readable": True, "same_mint_authority": ok, "same_freeze_authority": ok,
              "mint_authority": "A", "freeze_authority": "F", "control": _ctl(None)}]}],
             "chains_assessed": ["solana"], "chains_not_assessed": []}
-        b = dict(self.B, control=_ctl("K"))
+        b = dict(self.B, control=_ctl(self.SOL_K))
         v = agents.judge(self._s(b, e(False)), self._s(b, e(True)))
         self.assertEqual(_vote(v, "_agent_etf")["posture"], "ELEVATED")
         self.assertIn("same_mint_authority false", _vote(v, "_agent_etf")["why"])
@@ -1125,7 +1126,7 @@ class TestCouncilControlProbe(unittest.TestCase):
 
     def test_etf_chain_not_assessed_or_token_unreadable_is_elevated(self):
         """P5"""
-        b = dict(self.B, control=_ctl("K"))
+        b = dict(self.B, control=_ctl(self.SOL_K))
         down = {"chains": [{"chain": "bsc", "assessed": False, "reason": "stale node"}], "chains_assessed": [],
                 "chains_not_assessed": ["bsc"]}
         self.assertEqual(_vote(agents.judge(self._s(b, down), self._s(b)), "_agent_etf")["posture"], "ELEVATED")
@@ -1137,7 +1138,7 @@ class TestCouncilControlProbe(unittest.TestCase):
 
     def test_etf_layer_reaches_the_council_through_the_baseline(self):
         """P1 P4: orchestrator.baseline carries the ETF layer (before 0.3.0 it carried the fund layer only)."""
-        b = dict(self.B, control=_ctl("K"))
+        b = dict(self.B, control=_ctl(self.SOL_K))
         etf = {"chains": [{"chain": "ethereum", "assessed": True, "tokens": [dict(_token("ethereum", 3.0), token="bCSPX",
                readable=True, same_owner=True)]}], "chains_assessed": ["ethereum"], "chains_not_assessed": []}
         base = orch.baseline([{"snapshot": self._s(b, etf)}])
@@ -1361,29 +1362,30 @@ class TestControlRecord(unittest.TestCase):
         b["holders"]["0x" + "aa" * 20]["source"] = "other"
         t = lambda c: dict(_token("ethereum", 1.0, owner="0x" + "aa" * 20), control=c)     # noqa: E731
         self.assertEqual(agents._agent_control(_one_chain("ethereum", [t(b)]), _one_chain("ethereum", [t(a)]))[0], "QUIET")
-        for change in ({"threshold": 2, "members": ["0x1", "0x2"], "kind": "multisig"},):
+        for change in ({"threshold": 2, "members": ["0x" + "01" * 20, "0x" + "02" * 20], "kind": "multisig"},):
             c = copy.deepcopy(a)
             c["holders"]["0x" + "aa" * 20].update(change)
             self.assertEqual(agents._agent_control(_one_chain("ethereum", [t(c)]), _one_chain("ethereum", [t(a)]))[0], "ELEVATED")
 
     def test_power_and_holder_changes(self):
         """P1 P2: each compared field of each power and holder, changed alone, raises the posture."""
-        ms = core._holder("multisig", members=["0x1", "0x2", "0x3"], threshold=2, source="safe")
+        M, T, N, A1, A2, A3, A4 = ("0x" + d * 40 for d in "abc1234")             # EVM addresses as EVM writes them (CR-5)
+        ms = core._holder("multisig", members=[A1, A2, A3], threshold=2, source="safe")
         tl = core._holder("timelock", min_delay_s=86400, source="getMinDelay()")
-        base = _ctl("0xM", holders={"0xM": ms, "0xT": tl}, upgrade=core._power("present", "0xT", "eip1967.admin"))
+        base = _ctl(M, holders={M: ms, T: tl}, upgrade=core._power("present", T, "eip1967.admin"))
         self.assertIsNone(agents.validate_control(base))
-        t = lambda c: dict(_token("ethereum", 1.0, owner="0xM"), control=c)                 # noqa: E731
-        edits = [("powers", "owner", {"holder": "0xN"}), ("powers", "upgrade", {"status": "absent", "holder": None, "source": "x"}),
-                 ("holders", "0xM", {"members": ["0x1", "0x2", "0x4"]}), ("holders", "0xM", {"threshold": 1}),
-                 ("holders", "0xT", {"min_delay_s": 0})]
+        t = lambda c: dict(_token("ethereum", 1.0, owner=M), control=c)                 # noqa: E731
+        edits = [("powers", "owner", {"holder": N}), ("powers", "upgrade", {"status": "absent", "holder": None, "source": "x"}),
+                 ("holders", M, {"members": [A1, A2, A4]}), ("holders", M, {"threshold": 1}),
+                 ("holders", T, {"min_delay_s": 0})]
         for part, key, upd in edits:
             with self.subTest(part=part, key=key, upd=upd):
                 c = copy.deepcopy(base)
                 c[part][key].update(upd)
                 if part == "powers" and key == "owner":
-                    c["holders"]["0xN"] = c["holders"].pop("0xM")
+                    c["holders"][N] = c["holders"].pop(M)
                 if part == "powers" and key == "upgrade":
-                    c["holders"].pop("0xT")
+                    c["holders"].pop(T)
                 self.assertIsNone(agents.validate_control(c))
                 v = agents._agent_control(_one_chain("ethereum", [t(c)]), _one_chain("ethereum", [t(base)]))
                 self.assertEqual(v[0], "ELEVATED", v)
@@ -1517,6 +1519,137 @@ class TestControlRecord(unittest.TestCase):
         self.assertIn("no control record", v[1])
 
 
+    def test_reader_edges_left_alive_by_the_review(self):
+        """CR-14 CR-15 CR-9 P4: owner() answering zero is no owner; a declared multisig not owned by the Squads program is
+        not decoded; a rent_collector tag outside 0/1 is out of shape; y = 1 is on the curve (x = 0); a Stellar flag that
+        is not a boolean is not evaluated; an ETF key that is null is said not comparable."""
+        H = core.HOLDER_SELECTORS
+        core.rpc = self._rpc_with(calls={("0xS", "0x" + H["owner"]): "0x" + "00" * 32})
+        self.assertEqual(core.evm_holder("ethereum", "0xS", "0x1"),
+                         core._holder("contract", reason="no multisig, timelock or owner() interface answered"))
+        v = _vector("silv_squads_20260911")
+        raw = __import__("base64").b64decode(v["multisig_account_today_base64"])
+        core._sol_account = lambda a: ("11111111111111111111111111111111", raw)                       # noqa: E731
+        got = core.solana_holder(v["vault"], {v["vault"]: {"multisig": v["multisig"], "vault_index": 0}})
+        self.assertEqual(got["kind"], "not_evaluated")
+        self.assertIn("is not a Squads v4 account", got["reason"])
+        o = 8 + 32 + 32 + 2 + 4 + 8 + 8
+        body = raw[o + 1 + (32 if raw[o] == 1 else 0):]                 # the bytes after rent_collector
+        self.assertEqual(core.decode_squads_multisig(raw[:o] + b"\x00" + body)["threshold"], 3)   # tag 0: decodes
+        with self.assertRaises(ValueError):
+            core.decode_squads_multisig(raw[:o] + b"\x02" + body)                            # tag 2: out of shape
+        self.assertTrue(core._on_ed25519_curve((1).to_bytes(32, "little")))
+        e = [x for x in core.NONEVM_REGISTRY if x["chain"] == "stellar"]
+        saved = core._get_json
+        base = TestDiamondStellarMultiToken._xlm()
+
+        def get(url, timeout=25):
+            out = base(url, timeout)
+            if "/assets?" in url and "BENJI" in url:
+                out["_embedded"]["records"][0]["flags"] = {"auth_revocable": 1, "auth_clawback_enabled": "true"}
+            return out
+        try:
+            core._get_json = get
+            c = core.read_stellar(e, now=1_000_000 + 100)["tokens"][0]["control"]
+        finally:
+            core._get_json = saved
+        self.assertEqual((c["powers"]["freeze"]["status"], c["powers"]["seize"]["status"]), ("not_evaluated", "not_evaluated"))
+        etf = {"chains": [{"chain": "solana", "assessed": True, "tokens": [{"token": "SPYx", "readable": True,
+               "same_mint_authority": None, "same_freeze_authority": True}]}]}
+        why = agents._agent_etf({"etf_signal": etf})[1]
+        self.assertIn("not comparable: ['solana/SPYx: same_mint_authority']", why)
+
+    def test_control_compares_only_assessed_readable_tokens(self):
+        """P1 P5: the control analyst reads tokens of assessed chains only, and ETF tokens only when readable (an
+        unreadable token or a chain not assessed is raised by the ETF and coverage analysts, not compared here)."""
+        a, b = "0x" + "aa" * 20, "0x" + "bb" * 20
+        tok = lambda o, **k: dict(_token("ethereum", 1.0, owner=o), token="bCSPX", readable=True, control=_ctl(o), **k)  # noqa: E731
+        layer = lambda t, assessed=True: {"chains": [{"chain": "ethereum", "assessed": assessed, "tokens": [t]}]}       # noqa: E731
+        cur = {"signal": {"chains": []}, "etf_signal": layer(tok(a))}
+        self.assertEqual(agents._agent_control(cur, {"signal": {"chains": []}, "etf_signal": layer(tok(b), assessed=False)})[0], "QUIET")
+        self.assertEqual(agents._agent_control(cur, {"signal": {"chains": []}, "etf_signal": layer(tok(b))})[0], "ELEVATED")
+        unread = {"signal": {"chains": []}, "etf_signal": layer({"token": "bCSPX", "readable": False, "reason": "proxy"})}
+        self.assertEqual(agents._agent_control(unread, cur)[0], "QUIET")
+        self.assertEqual(agents._agent_etf(unread)[0], "ELEVATED")
+
+    def test_addresses_written_as_the_chain_writes_them(self):
+        """CR-5 P6: with the chain, every holder, member and owner address must be written as that chain writes it; a
+        record of the real StablR shape passes, each non-canonical form is refused, and the council raises it."""
+        good = _vector("stablr_usdr_20260524")["reading"]["after"]["control"]
+        self.assertIsNone(agents.validate_control(good, "ethereum"))                          # positive control
+        h = "0xf45392bd2d6e6b8c5dc26ba6c8a12889419b82f3"
+
+        def swap(c, new):
+            for p in c["powers"].values():
+                if p["holder"] == h:
+                    p["holder"] = new
+            c["holders"][new] = c["holders"].pop(h)
+            return c
+        for bad in (h.upper().replace("0X", "0x"), "0xF45392bd2D6e6b8C5Dc26BA6c8a12889419B82F3", h + "\n", h[:-2],
+                    "not-an-address"):
+            with self.subTest(holder=bad):
+                c = swap(copy.deepcopy(good), bad)
+                self.assertIsNone(agents.validate_control(c))                  # the shape alone is fine...
+                self.assertIn("is not written as ethereum", agents.validate_control(c, "ethereum"))   # ...the form is not
+        for field, val in (("members", ["0xC73FD562DE86D7860EE636C20813BCB2CF4D550D", "0xd4677b5a8b1b97ea213fdb876b0fcbab3f9f6cd1",
+                                         "0xd4b6543504df90faba649b80f8f669caffe0ad40"]),):
+            c = copy.deepcopy(good)
+            c["holders"][h][field] = val
+            self.assertIsNotNone(agents.validate_control(c, "ethereum"))
+        t = lambda c: dict(_token("ethereum", 1.0, owner=h), control=c)                        # noqa: E731
+        v = agents._agent_control(_one_chain("ethereum", [t(swap(copy.deepcopy(good), h.upper().replace("0X", "0x")))]),
+                                  _one_chain("ethereum", [t(good)]))
+        self.assertEqual(v[0], "ELEVATED")
+        self.assertIn("is not written as ethereum", v[1])
+        sol = core.b58encode(bytes(range(1, 33)))
+        for chain, ok, bads in (("solana", sol, ["0OIl" + sol[4:], core.b58encode(bytes(range(1, 32))), "1" + sol, sol + "\n"]),
+                                ("aptos", "0x" + "ab" * 32, ["0x" + "AB" * 32, "0x", "0x" + "ab" * 33]),
+                                ("stellar", "G" + "A" * 55, ["g" + "a" * 55, "G" + "A" * 54, "signers-sha256:" + "AB" * 32]),
+                                ("stellar", "signers-sha256:" + "ab" * 32, [])):
+            self.assertTrue(agents.address_ok(chain, ok), (chain, ok))
+            for b in bads:
+                with self.subTest(chain=chain, address=b):
+                    self.assertFalse(agents.address_ok(chain, b))
+
+    def test_absent_carries_no_reason(self):
+        """CR-5: reason is null for present and absent."""
+        c = _ctl(None)
+        self.assertIsNone(agents.validate_control(c))
+        c["powers"]["owner"]["reason"] = "a reason"
+        self.assertIsNotNone(agents.validate_control(c))
+
+    def test_holder_owner_and_kind_changes_are_raised(self):
+        """P2 CR-19: the owner of a contract holder changes while the token's owner() stays (the JLTXX / MONY shape),
+        and a holder's kind changes with every other compared field equal: both raised."""
+        tok, o1, o2 = "0x" + "aa" * 20, "0x" + "bb" * 20, "0x" + "cc" * 20
+        hd = lambda o: {tok: core._holder("contract", owner=o, source="owner()"), o: core._holder("eoa", source="no code")}  # noqa: E731
+        a, b = _ctl(tok, holders=hd(o1)), _ctl(tok, holders=hd(o2))
+        self.assertIsNone(agents.validate_control(a, "ethereum"))
+        self.assertIsNone(agents.validate_control(b, "ethereum"))
+        t = lambda c: dict(_token("ethereum", 1.0, owner=tok), control=c)                        # noqa: E731
+        v = agents._agent_control(_one_chain("ethereum", [t(b)]), _one_chain("ethereum", [t(a)]))
+        self.assertEqual(v[0], "ELEVATED")
+        self.assertIn(f"holder {tok}: owner {o1} -> {o2}", v[1])
+        k1 = _ctl(tok, holders={tok: core._holder("eoa", source="no code")})
+        k2 = _ctl(tok, holders={tok: core._holder("contract", reason="no multisig, timelock or owner() interface answered")})
+        v = agents._agent_control(_one_chain("ethereum", [t(k2)]), _one_chain("ethereum", [t(k1)]))
+        self.assertEqual(v[0], "ELEVATED")
+        self.assertIn("kind eoa -> contract", v[1])
+        self.assertEqual(agents._agent_control(_one_chain("ethereum", [t(k1)]), _one_chain("ethereum", [t(k1)]))[0], "QUIET")
+
+    def test_every_legacy_control_field_is_compared(self):
+        """P3: each field the specification lists, changed alone with an unchanged control record, raises the posture."""
+        sol = core.b58encode(bytes(range(1, 33)))
+        for f in agents.LEGACY_CONTROL_FIELDS:
+            with self.subTest(field=f):
+                b = dict(_token("solana", 1.0, owner=sol), control=_ctl(sol), **{f: "before"})
+                v = agents._agent_control(_one_chain("solana", [dict(b, **{f: "after"})]), _one_chain("solana", [b]))
+                self.assertEqual(v[0], "ELEVATED")
+                self.assertIn(f"{f} before -> after", v[1])
+        self.assertEqual(set(agents.LEGACY_CONTROL_FIELDS), {"freeze_authority", "permanent_delegate", "transfer_hook_program",
+                                                             "flags", "mint_authority", "control_key"})
+
+
 class TestSearchTriState(unittest.TestCase):
     """The first cycle of 13/11/2026 said «search blind (control failed)» for 8 fund/chain pairs: 3 had no explorer
     configured (avalanche, base), 4 were refused by the explorer (arbitrum, polygon: HTTP 403 on every term), 1 was a
@@ -1566,6 +1699,12 @@ class TestSearchTriState(unittest.TestCase):
         prev = copy.deepcopy(s)
         prev["signal"]["chains"][1]["discovery"]["search_control"] = {"BUIDL": True}
         self.assertEqual(agents._agent_imitations(s, prev)[0], "ELEVATED")       # S3: true -> null is sight lost
+        why = agents._agent_imitations(s, prev)[1]
+        self.assertIn("not searched this cycle: ['avalanche/BUIDL']", why)       # S2: null is not "no longer finds"
+        self.assertNotIn("no longer finds", why)
+        gone = copy.deepcopy(s)
+        gone["signal"]["chains"][1]["discovery"]["search_control"] = {"BUIDL": False}
+        self.assertIn("no longer finds the registered token of: ['avalanche/BUIDL']", agents._agent_imitations(gone, prev)[1])
 
 
 if __name__ == "__main__":

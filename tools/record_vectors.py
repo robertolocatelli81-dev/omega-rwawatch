@@ -27,7 +27,7 @@ OUT = os.path.join(ROOT, "tests", "vectors")
 
 VECTORS = {
     "stablr_usdr_20260524": {
-        "incident": "StablR USDR / EURR, 24/05/2026: the owner() of the token (a Gnosis MultiSigWallet) stayed the same "
+        "incident": "StablR USDR / EURR, 23/05/2026 23:33 UTC (the issuer's statement dates the incident 24/05): the owner() of the token (a Gnosis MultiSigWallet) stayed the same "
                     "while its owner list changed — an outside key added at block 25161285, the original two owners "
                     "replaced in the following blocks; unbacked tokens minted after that",
         "sources": ["https://www.stablr.com/insights/stablr-discloses-cybersecurity-incident-affecting-usdr-and-eurr-token-operations "
@@ -45,7 +45,7 @@ VECTORS = {
     },
     "zoth_subvault_20250321": {
         "incident": "Zoth, 21/03/2025: the implementation behind the ERC1967Proxy USD0PPSubVault was replaced at block "
-                    "22094140 by a key that was not the protocol's (about 8.4 M USD lost)",
+                    "22094140 by the protocol's admin key, reported compromised (about 8.4 M USD lost)",
         "sources": ["https://rekt.news/zoth-rekt", "https://www.halborn.com/blog/post/explained-the-zoth-hack-march-2025",
                     "https://quillaudits.com/blog/hack-analysis/zoth-loose-8.4m-dollar-due-to-access-control "
                     "(names the new implementation 0xc89d7894341e13d5067d003af5346b257d861f56)",
