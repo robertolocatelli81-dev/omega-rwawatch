@@ -24,6 +24,7 @@ contracts by a shared owner(). Stdlib only; the hash-chain is VENDORED (never im
 
 Run:  python3 rwawatch.py            # one snapshot, printed, not saved
 """
+import base64
 import hashlib
 import json
 import ssl
@@ -35,7 +36,7 @@ from datetime import datetime, timezone
 LEDGER = "rwawatch_ledger.jsonl"
 GENESIS = "0" * 64
 _CTX = ssl.create_default_context()
-USER_AGENT = "omega-rwawatch/0.1"
+USER_AGENT = "omega-rwawatch/0.3"
 
 # Public RPC endpoints (one per chain; a failure is reported, never papered over).
 RPC = {
@@ -58,7 +59,8 @@ MAX_BLOCK_AGE_S = 900        # a node whose latest block is older than this is l
 DISCOVERY = {
     "ethereum": ("blockscout", "https://eth.blockscout.com"),
     "arbitrum": ("blockscout", "https://arbitrum.blockscout.com"),
-    "optimism": ("blockscout", "https://optimism.blockscout.com"),
+    # optimism.blockscout.com answers 301 to explorer.optimism.io (measured 2026-11-13): the target is called directly
+    "optimism": ("blockscout", "https://explorer.optimism.io"),
     "polygon": ("blockscout", "https://polygon.blockscout.com"),
     "bsc": ("bscscan-search", "https://bscscan.com/searchHandler"),
 }
@@ -384,7 +386,8 @@ def read_solana(entries, now=None):
                 "implementation_code_sha256": hashlib.sha256(json.dumps(
                     {"program": program, "extensions": sorted(ext), "hook": (ext.get("transferHook") or {}).get("programId")},
                     sort_keys=True).encode()).hexdigest(),
-                "eip712_entry_points": [], "read_at_slot": cslot})
+                "eip712_entry_points": [], "read_at_slot": cslot,
+                "control": solana_control(info, ext, e.get("declared_squads"))})
             if tokens[-1]["symbol"] is None or tokens[-1]["total_supply"] is None:
                 return {"chain": "solana", "assessed": False, "node": node, "control": ctl,
                         "reason": f"{e['token']} at {e['address']}: symbol or supply not readable"}
@@ -444,7 +447,8 @@ def read_aptos(entries, now=None):
                 "modules": sorted(m["abi"]["name"] for m in mods if m.get("abi")),
                 "implementation_code_sha256": hashlib.sha256(code.encode()).hexdigest() if code else None,
                 "signature_primitives_in_modules": used, "eip712_entry_points": [],
-                "dispatchable_hooks": "0x1::fungible_asset::DispatchFunctionStore" in res})
+                "dispatchable_hooks": "0x1::fungible_asset::DispatchFunctionStore" in res,
+                "control": account_control(owner, "object owner")})
             if tokens[-1]["symbol"] is None or tokens[-1]["total_supply"] is None:
                 return {"chain": "aptos", "assessed": False, "node": node, "control": ctl,
                         "reason": f"{e['token']} at {e['address']}: symbol or supply not readable"}
@@ -513,6 +517,16 @@ def read_stellar(entries, now=None):
                 "implementation_code_sha256": hashlib.sha256(json.dumps(
                     {"flags": a["flags"], "contract_id": a.get("contract_id")}, sort_keys=True).encode()).hexdigest() if a else None,
                 "eip712_entry_points": []})
+            if a:
+                fl = a.get("flags") or {}
+
+                def flag(name, source):
+                    return (_power("present", e["address"], source) if fl.get(name) is True else
+                            _power("absent", source=source) if fl.get(name) is False else
+                            _power("not_evaluated", reason=f"asset flag {name} not in the answer"))
+                tokens[-1]["control"] = account_control(tokens[-1]["owner"], "issuer signers fingerprint",
+                                                        flag("auth_revocable", "flags.auth_revocable"),
+                                                        flag("auth_clawback_enabled", "flags.auth_clawback_enabled"))
             if tokens[-1]["symbol"] is None or tokens[-1]["total_supply"] is None:
                 return {"chain": "stellar", "assessed": False, "node": node, "control": ctl,
                         "reason": f"{e['token']} issued by {e['address']}: asset not readable"}
@@ -732,6 +746,273 @@ def read_access_control_admin(chain, address, block, cap=8):
     return {"count": n, "members": members}
 
 
+# ───────────────────────── control record (spec/control-record.md, rwawatch-control/1) ──
+CONTROL_SPEC = "rwawatch-control/1"
+CONTROL_KEYS = ("spec", "powers", "holders")                                          # [CR-3]
+POWERS = ("owner", "upgrade", "mint", "freeze", "seize", "pause")                     # [CR-4]
+POWER_KEYS = ("status", "holder", "source", "reason")                                 # [CR-5]
+POWER_STATUS = ("present", "absent", "not_evaluated")                                 # [CR-5]
+HOLDER_KEYS = ("kind", "members", "threshold", "min_delay_s", "owner", "source", "reason")   # [CR-13]
+HOLDER_KINDS = ("eoa", "multisig", "timelock", "contract", "account", "not_evaluated")        # [CR-13]
+EIP1967_ADMIN_SLOT = "0xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103"
+HOLDER_SELECTORS = {"owner": "8da5cb5b", "getOwners": "a0e67e2b", "getThreshold": "e75235b8",   # Safe
+                    "required": "dc8452cd",                                                  # Gnosis MultiSigWallet
+                    "getMinDelay": "f27a0c92"}                                               # OZ TimelockController
+EVM_NOT_EVALUATED = "no standard on-chain interface enumerates this power on EVM"
+
+
+def _power(status, holder=None, source=None, reason=None):
+    """One power, closed shape [CR-5]: a holder only when present, a reason only when not evaluated."""
+    if status not in POWER_STATUS:
+        raise ValueError(f"power status {status!r} outside {POWER_STATUS}")
+    if (status == "present") != (holder is not None) or (status == "not_evaluated") != bool(reason):
+        raise ValueError(f"power {status}: holder {holder!r} / reason {reason!r} do not fit the status")
+    return {"status": status, "holder": holder, "source": source, "reason": reason}
+
+
+def _holder(kind, members=None, threshold=None, min_delay_s=None, owner=None, source=None, reason=None):
+    if kind not in HOLDER_KINDS:
+        raise ValueError(f"holder kind {kind!r} outside {HOLDER_KINDS}")
+    return {"kind": kind, "members": members, "threshold": threshold, "min_delay_s": min_delay_s, "owner": owner,
+            "source": source, "reason": reason}
+
+
+def _word_uint(h):
+    """A single 32-byte ABI word as an int; None when the answer is not exactly one word."""
+    return int(h, 16) if isinstance(h, str) and len(h) == 66 else None
+
+
+def _abi_address_array_checked(h):
+    """getOwners(): a dynamic address[]; None when the answer is not well-formed (then it is not a multisig answer)."""
+    try:
+        b = bytes.fromhex(h[2:])
+        if len(b) < 64 or int.from_bytes(b[:32], "big") != 32:
+            return None
+        n = int.from_bytes(b[32:64], "big")
+        if n == 0 or n > 256 or len(b) != 64 + 32 * n:
+            return None
+        words = [b[64 + 32 * i:96 + 32 * i] for i in range(n)]
+        if any(w[:12] != b"\0" * 12 for w in words):
+            return None
+        return sorted("0x" + w[12:].hex() for w in words)
+    except (ValueError, TypeError):
+        return None
+
+
+def evm_holder(chain, address, block):
+    """[CR-14] What kind of holder `address` is, at `block`: no code = one key (eoa); a Safe / MultiSigWallet answers its
+    owners and threshold; a TimelockController its minimum delay; else a contract, with its owner() when it answers."""
+    code = rpc(chain, "eth_getCode", [address, block]) or "0x"
+    if len(code) <= 2:
+        return _holder("eoa", source="no code at the address")
+    owners = eth_call(chain, address, "0x" + HOLDER_SELECTORS["getOwners"], block)
+    members = _abi_address_array_checked(owners) if owners else None
+    if members:
+        for iface, sel in (("safe", "getThreshold"), ("multisigwallet", "required")):
+            t = _word_uint(eth_call(chain, address, "0x" + HOLDER_SELECTORS[sel], block))
+            if t is not None and 1 <= t <= len(members):
+                return _holder("multisig", members=members, threshold=t, source=iface)
+    d = _word_uint(eth_call(chain, address, "0x" + HOLDER_SELECTORS["getMinDelay"], block))
+    if d is not None:
+        return _holder("timelock", min_delay_s=d, source="getMinDelay()")
+    o = eth_call(chain, address, "0x" + HOLDER_SELECTORS["owner"], block)
+    if o and len(o) == 66 and int(o, 16) >> 160 == 0 and int(o, 16):
+        return _holder("contract", owner="0x" + o[-40:].lower(), source="owner()")
+    return _holder("contract", reason="no multisig, timelock or owner() interface answered")
+
+
+def _holders(powers, read):
+    """[CR-12] One entry per distinct holder of the powers; [CR-14] a contract's owner() gets its own entry, one level."""
+    out = {}
+    for p in POWERS:
+        h = powers[p]["holder"]
+        if h is not None and h not in out:
+            try:
+                out[h] = read(h)
+            except RpcError as ex:                                   # [CR-17] a node error on a holder: said
+                out[h] = _holder("not_evaluated", reason=f"RpcError: {str(ex)[:120]}")
+    for h, e in list(out.items()):
+        o = e.get("owner")
+        if o and o not in out:
+            try:
+                out[o] = read(o)
+            except RpcError as ex:
+                out[o] = _holder("not_evaluated", reason=f"RpcError: {str(ex)[:120]}")
+    # one level only: an owner's own owner stays recorded as a value in its entry and is never followed
+    return dict(sorted(out.items()))
+
+
+def evm_upgrade_power(chain, address, block, structure):
+    """[CR-7] Who can change the code behind `address`."""
+    slot = structure.get("implementation_slot")
+    if slot == "eip1967":
+        a = rpc(chain, "eth_getStorageAt", [address, EIP1967_ADMIN_SLOT, block])
+        if a and int(a, 16):
+            return _power("present", "0x" + a[-40:].lower(), "eip1967.admin")
+        return _power("not_evaluated", reason="EIP-1967 implementation with an empty admin slot: the upgrade gate is in "
+                                              "the implementation's code (UUPS or custom), not read")
+    if slot == "beacon":
+        o = eth_call(chain, structure["beacon"], "0x" + HOLDER_SELECTORS["owner"], block)
+        if o and len(o) == 66 and int(o, 16):
+            return _power("present", "0x" + o[-40:].lower(), "beacon.owner()")
+        return _power("not_evaluated", reason="beacon proxy whose beacon does not answer owner()")
+    if slot in ("eip2535", "zeppelinos", "slot1"):
+        return _power("not_evaluated", reason=f"{slot} proxy: the upgrade gate is in code, not read")
+    if slot is None:
+        return _power("absent", source="no EIP-1967, ZeppelinOS, slot-1, beacon or EIP-2535 proxy")
+    return _power("not_evaluated", reason=f"proxy slot {slot!r} not covered by this version")
+
+
+def evm_control(chain, address, block, structure, owner_key, owner_source="owner()"):
+    """[CR-1] The control record of an EVM token at `block`. `owner_key` is the controlling key already read
+    (owner(), or the ETF layer's sole DEFAULT_ADMIN_ROLE member); None = owner() reverted."""
+    zero = owner_key is not None and int(owner_key, 16) == 0
+    powers = {
+        "owner": (_power("present", owner_key.lower(), owner_source) if owner_key and not zero
+                  else _power("absent", source=f"{owner_source} answers the zero address") if zero
+                  else _power("absent", source="owner() reverted")),                       # [CR-6]
+        "upgrade": evm_upgrade_power(chain, address, block, structure),                   # [CR-7]
+        "mint": _power("not_evaluated", reason=EVM_NOT_EVALUATED),                        # [CR-8]
+        "freeze": _power("not_evaluated", reason=EVM_NOT_EVALUATED),                      # [CR-9]
+        "seize": _power("not_evaluated", reason=EVM_NOT_EVALUATED),                       # [CR-10]
+        "pause": _power("not_evaluated", reason=EVM_NOT_EVALUATED),                       # [CR-11]
+    }
+    return {"spec": CONTROL_SPEC, "powers": powers, "holders": _holders(powers, lambda h: evm_holder(chain, h, block))}
+
+
+# Solana: Squads v4 multisig (program SQDS4…). Account layout (Anchor): 8-byte discriminator, create_key, config_authority,
+# threshold u16, time_lock u32, transaction_index u64, stale_transaction_index u64, rent_collector Option<Pubkey>, bump u8,
+# members Vec<(Pubkey, permissions u8)>. A vault is the PDA ["multisig", multisig, "vault", index] of the program.
+SQUADS_V4 = "SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf"
+SQUADS_MULTISIG_DISCRIMINATOR = hashlib.sha256(b"account:Multisig").digest()[:8]
+_B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+
+
+def b58encode(b):
+    n, s = int.from_bytes(b, "big"), ""
+    while n:
+        n, r = divmod(n, 58)
+        s = _B58[r] + s
+    return "1" * (len(b) - len(b.lstrip(b"\0"))) + s
+
+
+def b58decode(s):
+    n = 0
+    for ch in s:
+        n = n * 58 + _B58.index(ch)
+    body = n.to_bytes((n.bit_length() + 7) // 8, "big") if n else b""
+    return b"\0" * (len(s) - len(s.lstrip("1"))) + body
+
+
+_ED_P = 2 ** 255 - 19
+_ED_D = (-121665 * pow(121666, _ED_P - 2, _ED_P)) % _ED_P
+
+
+def _on_ed25519_curve(b):
+    """True when the 32 bytes decode to a point of edwards25519 (RFC 8032 §5.1.3): a PDA must NOT be on the curve."""
+    y = int.from_bytes(b, "little") & ((1 << 255) - 1)
+    if y >= _ED_P:
+        return False
+    u, v = (y * y - 1) % _ED_P, (_ED_D * y * y + 1) % _ED_P
+    x2 = u * pow(v, _ED_P - 2, _ED_P) % _ED_P
+    if x2 == 0:
+        return True
+    x = pow(x2, (_ED_P + 3) // 8, _ED_P)
+    if (x * x - x2) % _ED_P != 0:
+        x = x * pow(2, (_ED_P - 1) // 4, _ED_P) % _ED_P
+    return (x * x - x2) % _ED_P == 0
+
+
+def find_program_address(seeds, program_id):
+    """Solana's find_program_address: the first bump from 255 down whose hash is off the curve."""
+    pid = b58decode(program_id)
+    for bump in range(255, -1, -1):
+        h = hashlib.sha256(b"".join(seeds) + bytes([bump]) + pid + b"ProgramDerivedAddress").digest()
+        if not _on_ed25519_curve(h):
+            return b58encode(h), bump
+    raise ValueError("no program address found")
+
+
+def squads_vault(multisig, index=0):
+    return find_program_address([b"multisig", b58decode(multisig), b"vault", bytes([index])], SQUADS_V4)[0]
+
+
+def decode_squads_multisig(raw):
+    """Members (sorted), threshold and time lock of a Squads v4 Multisig account; ValueError on any other shape."""
+    if raw[:8] != SQUADS_MULTISIG_DISCRIMINATOR:
+        raise ValueError("not a Squads v4 Multisig account (discriminator)")
+    o = 8 + 32 + 32
+    threshold = int.from_bytes(raw[o:o + 2], "little")
+    time_lock = int.from_bytes(raw[o + 2:o + 6], "little")
+    o += 2 + 4 + 8 + 8
+    if raw[o] not in (0, 1):
+        raise ValueError("bad rent_collector option tag")
+    o += 1 + (32 if raw[o] == 1 else 0) + 1
+    n = int.from_bytes(raw[o:o + 4], "little")
+    o += 4
+    if n == 0 or len(raw) < o + 33 * n or not 1 <= threshold <= n:
+        raise ValueError("member list or threshold out of shape")
+    members = sorted(b58encode(raw[o + 33 * i:o + 33 * i + 32]) for i in range(n))
+    return {"members": members, "threshold": threshold, "time_lock_s": time_lock}
+
+
+def _sol_account(address):
+    v = _post_json(SOLANA_RPC, "getAccountInfo", [address, {"encoding": "base64", "commitment": "finalized"}])["value"]
+    if v is None:
+        return None, b""
+    return v["owner"], base64.b64decode(v["data"][0])
+
+
+def solana_holder(address, declared=None):
+    """[CR-15] A Solana holder: a Squads v4 multisig account is decoded; a vault PDA is decoded through the multisig the
+    registry declares for it, only if deriving the vault from that multisig gives this address."""
+    program, raw = _sol_account(address)
+    if program == SQUADS_V4:
+        ms = decode_squads_multisig(raw)
+        return _holder("multisig", members=ms["members"], threshold=ms["threshold"], min_delay_s=ms["time_lock_s"],
+                       source="squads-v4")
+    d = (declared or {}).get(address)
+    if d:
+        if squads_vault(d["multisig"], d["vault_index"]) != address:
+            return _holder("not_evaluated", reason=f"declared Squads multisig {d['multisig']} does not derive this vault")
+        mprog, mraw = _sol_account(d["multisig"])
+        if mprog != SQUADS_V4:
+            return _holder("not_evaluated", reason=f"declared multisig {d['multisig']} is not a Squads v4 account")
+        ms = decode_squads_multisig(mraw)
+        return _holder("multisig", members=ms["members"], threshold=ms["threshold"], min_delay_s=ms["time_lock_s"],
+                       source=f"squads-v4 vault {d['vault_index']} of {d['multisig']}")
+    return _holder("account", reason="a key or a program-derived address: who signs for it is not read")
+
+
+def solana_control(info, ext, declared=None, read=None):
+    """[CR-1] The control record of a Solana mint from its parsed account (mint authority, freeze authority, Token-2022
+    permanent delegate and pausable authority)."""
+    def p(value, source):
+        return _power("present", value, source) if value else _power("absent", source=f"{source} not set")
+    pd = (ext.get("permanentDelegate") or {}).get("delegate")
+    pa = (ext.get("pausableConfig") or {}).get("authority")
+    powers = {"owner": p(info.get("mintAuthority"), "mintAuthority"),                             # [CR-6]
+              "upgrade": _power("not_evaluated", reason="the token program is shared: the mint has no code of its own"),
+              "mint": p(info.get("mintAuthority"), "mintAuthority"),                              # [CR-8]
+              "freeze": p(info.get("freezeAuthority"), "freezeAuthority"),                        # [CR-9]
+              "seize": p(pd, "permanentDelegate"),                                                # [CR-10]
+              "pause": p(pa, "pausableConfig.authority")}                                         # [CR-11]
+    return {"spec": CONTROL_SPEC, "powers": powers,
+            "holders": _holders(powers, read or (lambda h: solana_holder(h, declared)))}
+
+
+def account_control(owner_key, owner_source, freeze=None, seize=None):
+    """[CR-16] Aptos (owner only) and Stellar (owner = signers fingerprint; freeze / seize from the asset flags)."""
+    powers = {"owner": _power("present", owner_key, owner_source) if owner_key else _power("absent", source=owner_source),
+              "upgrade": _power("not_evaluated", reason="not read on this chain in rwawatch-control/1"),
+              "mint": _power("not_evaluated", reason="not read on this chain in rwawatch-control/1"),
+              "freeze": freeze or _power("not_evaluated", reason="not read on this chain in rwawatch-control/1"),
+              "seize": seize or _power("not_evaluated", reason="not read on this chain in rwawatch-control/1"),
+              "pause": _power("not_evaluated", reason="not read on this chain in rwawatch-control/1")}
+    return {"spec": CONTROL_SPEC, "powers": powers,
+            "holders": _holders(powers, lambda h: _holder("account", source="key on a non-EVM chain"))}
+
+
 def read_token(chain, address, block):
     dec = _abi_uint(eth_call(chain, address, "0x313ce567", block))
     raw = _abi_uint(eth_call(chain, address, "0x18160ddd", block))
@@ -782,7 +1063,10 @@ def search_same_named(chain):
                 for a in hits:
                     found.setdefault(a, fund)
             except Exception as ex:                   # the explorer failed: say so, never read it as "none found"
-                errors.append(f"{term}: {type(ex).__name__}")
+                errors.append(f"{term}: {type(ex).__name__}" + (f" {ex.code}" if hasattr(ex, "code") else ""))
+    n_terms = sum(len(spec["terms"]) for spec in FUND_SEARCH.values())
+    if errors and len(errors) == n_terms:            # [S1] no term answered: the chain was not searched, not "blind"
+        return f"not searched (the explorer failed every term: {'; '.join(errors)})", {}
     status = (f"searched {kind}, first result page per term, {len(FUND_SEARCH)} funds"
               + (f" (errors: {'; '.join(errors)})" if errors else ""))
     return status, dict(sorted(found.items(), key=lambda kv: kv[0].lower()))
@@ -843,6 +1127,7 @@ def read_etf_evm(chain, block, entries):
                 rec["beacon"] = s["beacon"]
             rec["eip712_entry_points"] = s["eip712_entry_points"]
             rec["permissioned"] = read_permissioned(chain, e["address"], block)
+            rec["control"] = evm_control(chain, e["address"], block, s, key, kind or "owner()")
             if s["implementation"] is None and s["proxy_code_bytes"] < 1024:
                 # the same guard as the fund layer: a small proxy whose implementation is not located is NOT ASSESSED
                 rec["readable"] = False
@@ -893,7 +1178,8 @@ def read_etf_solana(entries, now=None):
                 "same_freeze_authority": info.get("freezeAuthority") == e["expected_freeze_authority"],
                 "token2022": program == XSTOCKS_TOKEN2022,
                 "transfer_hook_program": (ext.get("transferHook") or {}).get("programId"),
-                "permissioned_controls": sorted(k for k in ext if k in SOLANA_CONTROL_EXTENSIONS)})
+                "permissioned_controls": sorted(k for k in ext if k in SOLANA_CONTROL_EXTENSIONS),
+                "control": solana_control(info, ext, e.get("declared_squads"))})
         except Exception as ex:
             out.append({"token": e["token"], "address": e["address"], "readable": False,
                         "reason": f"{type(ex).__name__}: {str(ex)[:160]}"})
@@ -987,11 +1273,13 @@ def discover(chain, block, registered):
     # If not, the explorer cannot see that fund here and "nothing found" means nothing (25/09: BscScan returns [] for
     # every USYC term, yet USYC is on BNB Chain).
     found = {a.lower() for a in hits}
+    searched = not status.startswith("not searched")
     by_fund = {}
     for e in REGISTRY:
         if e["chain"] == chain and e["address"].lower() in known and e["token"] in FUND_SEARCH:
-            by_fund[e["token"]] = by_fund.get(e["token"], False) or e["address"].lower() in found
-    blind = sorted(f for f, ok in by_fund.items() if not ok)
+            # [S1] true / false only where the explorer answered; null where the chain was not searched
+            by_fund[e["token"]] = (by_fund.get(e["token"], False) or e["address"].lower() in found) if searched else None
+    blind = sorted(f for f, ok in by_fund.items() if ok is False)
     if blind and not status.startswith("not searched"):
         status += f"; search control FAILED for {', '.join(blind)} (the registered token is not in the results: " \
                   "no finding for that fund here is meaningful)"
@@ -1039,6 +1327,23 @@ def evm_node_gate(chain, now=None):
     return {"ok": True, "node": node, "block": block, "ctl": ctl}
 
 
+def read_evm_token(chain, e, block):
+    """One registered EVM token at `block`: supply, owner, structure and its control record. {"unreadable": why} when
+    the token cannot be read soundly (then the whole chain is NOT ASSESSED)."""
+    t = read_token(chain, e["address"], block)
+    if t["symbol"] is None or t["total_supply"] is None:
+        return {"unreadable": f"{e['token']} at {e['address']}: symbol or supply not readable"}
+    t.update(read_structure(chain, e["address"], block))
+    if t["implementation"] is None and t["proxy_code_bytes"] < 1024:   # (a Diamond answers its loupe: not here)
+        # a small proxy whose implementation this reader cannot locate: the EIP-712 scan would read the proxy
+        # itself and report "absent" (NEMESIS 25/09) — not assessed instead of a false clean
+        return {"unreadable": f"{e['token']} at {e['address']}: proxy of {t['proxy_code_bytes']} bytes, implementation not located"}
+    t.update({"token": e["token"], "address": e["address"], "provenance": e["provenance"],
+              "expected_owner": e.get("expected_owner", EXPECTED_OWNER)})
+    t["control"] = evm_control(chain, e["address"], block, t, t["owner"])             # [CR-1]
+    return t
+
+
 def read_chain(chain, entries, now=None, discovery=True):
     """One chain: node identity (chain id, block age), positive control, then every registered token and, if
     enabled, same-named unregistered tokens. Any failure of the node checks makes the chain NOT ASSESSED."""
@@ -1049,18 +1354,9 @@ def read_chain(chain, entries, now=None, discovery=True):
         node, block, ctl = g["node"], g["block"], g["ctl"]
         tokens = []
         for e in entries:
-            t = read_token(chain, e["address"], block)
-            if t["symbol"] is None or t["total_supply"] is None:
-                return {"chain": chain, "assessed": False, "node": node, "control": ctl,
-                        "reason": f"{e['token']} at {e['address']}: symbol or supply not readable"}
-            t.update(read_structure(chain, e["address"], block))
-            if t["implementation"] is None and t["proxy_code_bytes"] < 1024:   # (a Diamond answers its loupe: not here)
-                # a small proxy whose implementation this reader cannot locate: the EIP-712 scan would read the proxy
-                # itself and report "absent" (NEMESIS 25/09) — not assessed instead of a false clean
-                return {"chain": chain, "assessed": False, "node": node, "control": ctl,
-                        "reason": f"{e['token']} at {e['address']}: proxy of {t['proxy_code_bytes']} bytes, implementation not located"}
-            t.update({"token": e["token"], "address": e["address"], "provenance": e["provenance"],
-                      "expected_owner": e.get("expected_owner", EXPECTED_OWNER)})
+            t = read_evm_token(chain, e, block)
+            if "unreadable" in t:
+                return {"chain": chain, "assessed": False, "node": node, "control": ctl, "reason": t["unreadable"]}
             tokens.append(t)
         found = discover(chain, block, [e["address"] for e in entries]) if discovery else {"status": "disabled", "unregistered": []}
         return {"chain": chain, "assessed": True, "block": int(block, 16), "rpc": RPC[chain], "node": node,

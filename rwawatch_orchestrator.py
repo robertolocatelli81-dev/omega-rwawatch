@@ -180,8 +180,25 @@ def write_evidence(record):
             "pq_public_key_b64": pq_pub, "signatures": pq_note}
 
 
+def _layer_baseline(snaps, layer):
+    """Per chain of one layer, the last reading in which that chain was assessed (else its latest unassessed one)."""
+    last_assessed, last_seen = {}, {}
+    for s in snaps:                                   # oldest → newest: later readings overwrite earlier ones
+        for c in (s.get(layer) or {}).get("chains", []):
+            last_seen[c["chain"]] = c
+            if c.get("assessed"):
+                last_assessed[c["chain"]] = c
+    order = [c["chain"] for c in (snaps[-1].get(layer) or {}).get("chains", [])]
+    order += [n for n in last_seen if n not in order]
+    chains = [last_assessed.get(n, last_seen[n]) for n in order]
+    return {"chains": chains,
+            "chains_assessed": [c["chain"] for c in chains if c.get("assessed")],
+            "chains_not_assessed": [c["chain"] for c in chains if not c.get("assessed")]}
+
+
 def baseline(memory):
-    """What each chain looked like the LAST time it was assessed, merged into one snapshot for the council.
+    """What each chain looked like the LAST time it was assessed, merged into one snapshot for the council — for the fund
+    layer and, since rwawatch-control/1, for the ETF layer too (before, the ETF layer never reached the council).
 
     Comparing with the previous cycle alone let a chain that was not assessed for one cycle drop out of every
     comparison: an upgrade and a 667x mint during a one-cycle outage came back QUIET (independent review, 26/09/2026,
@@ -189,20 +206,12 @@ def baseline(memory):
     snaps = [r["snapshot"] for r in memory if r.get("snapshot")]
     if not snaps:
         return None
-    last_assessed, last_seen = {}, {}
-    for s in snaps:                                   # oldest → newest: later readings overwrite earlier ones
-        for c in s["signal"].get("chains", []):
-            last_seen[c["chain"]] = c
-            if c.get("assessed"):
-                last_assessed[c["chain"]] = c
-    order = [c["chain"] for c in snaps[-1]["signal"].get("chains", [])]
-    order += [n for n in last_seen if n not in order]
-    chains = [last_assessed.get(n, last_seen[n]) for n in order]
-    return {"timestamp_utc": snaps[-1].get("timestamp_utc"), "domain": snaps[-1].get("domain"),
-            "baseline": "per chain, the last cycle in which that chain was assessed",
-            "signal": {"chains": chains,
-                       "chains_assessed": [c["chain"] for c in chains if c.get("assessed")],
-                       "chains_not_assessed": [c["chain"] for c in chains if not c.get("assessed")]}}
+    out = {"timestamp_utc": snaps[-1].get("timestamp_utc"), "domain": snaps[-1].get("domain"),
+           "baseline": "per chain, the last cycle in which that chain was assessed",
+           "signal": _layer_baseline(snaps, "signal")}
+    if any("etf_signal" in s for s in snaps):
+        out["etf_signal"] = _layer_baseline([s for s in snaps if "etf_signal" in s], "etf_signal")
+    return out
 
 
 def run_cycle(snapshot_fn=None, evidence=True):
