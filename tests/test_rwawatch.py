@@ -1412,6 +1412,11 @@ class TestControlRecord(unittest.TestCase):
         all_paths = list(paths(good))
         dict_paths = [p for p in all_paths if isinstance(get(good, p), dict)]
         wrong_values = [None, 0, -1, True, 1.5, "", "x", [], {}, ["b", "a"]]
+        # per field, only values the specification forbids wherever that field sits in this record (CR-5, CR-13, CR-14)
+        invalid = {"members": [None, 0, "", "x", [], {}, ["b", "a"], 1.5], "threshold": [None, 0, -1, True, 1.5, "", "x", [], {}],
+                   "min_delay_s": [-1, True, 1.5, "", "x", [], {}], "holder": [0, True, 1.5, "", "x", [], {}],
+                   "reason": [0, -1, True, 1.5, "", [], {}, ["b", "a"]], "source": [0, -1, True, 1.5, "", [], {}, ["b", "a"]],
+                   "owner": [0, -1, True, 1.5, "", "x", [], {}]}
         for i in range(3000):
             c = copy.deepcopy(good)
             kind = rng.randrange(6)
@@ -1428,7 +1433,11 @@ class TestControlRecord(unittest.TestCase):
             elif kind == 3:                                                   # a wrong type where a value is closed
                 p = rng.choice([p for p in all_paths if p and p[-1] in ("members", "threshold", "min_delay_s", "holder", "reason", "source", "owner")])
                 cur = get(c, p)
-                choices = [w for w in wrong_values if w != cur and not (p[-1] in ("reason", "source", "owner", "holder", "min_delay_s", "members", "threshold") and w is None)]
+                choices = [w for w in invalid[p[-1]] if not (w == cur and type(w) is type(cur))]
+                if p[-1] == "threshold" and get(c, p[:-1])["kind"] != "multisig":
+                    choices = [w for w in choices if w is not None]
+                if not choices:
+                    continue
                 get(c, p[:-1])[p[-1]] = rng.choice(choices)
             elif kind == 4:                                                   # a holder that holds no power
                 c["holders"]["0x" + "99" * 20] = core._holder("eoa", source="x")
@@ -1438,16 +1447,66 @@ class TestControlRecord(unittest.TestCase):
                 continue
             tried += 1
             err = agents.validate_control(c)
-            if err is None:
-                # a mutation can land on a value the specification allows (a string source replaced by another string):
-                # then the record is still well-formed — check it really is, by the rules written in CR-5 / CR-13
-                self.assertEqual(kind, 3, (kind, c))
-                continue
+            self.assertIsNotNone(err, (kind, c))
             refused += 1
             t = dict(_token("ethereum", 1.0), control=c)
             self.assertEqual(agents._agent_control(_one_chain("ethereum", [t]))[0], "ELEVATED")
         self.assertGreater(refused, 2500)
         self.assertGreater(tried, 2900)
+
+    def test_holder_entries_closed_per_kind(self):
+        """CR-13 CR-14: each kind carries only its own fields; a multisig's members sorted, distinct, with a threshold
+        between 1 and their number; a timelock's delay a non-negative integer; the kind from the closed list."""
+        def rec(entry):
+            c = _ctl("0xH")
+            c["holders"]["0xH"] = entry
+            return c
+        ok = [core._holder("eoa", source="s"), core._holder("multisig", members=["0x1", "0x2"], threshold=2),
+              core._holder("multisig", members=["0x1"], threshold=1, min_delay_s=0), core._holder("timelock", min_delay_s=0),
+              core._holder("contract", owner=None, reason="r"), core._holder("account", reason="r"),
+              core._holder("not_evaluated", reason="r")]
+        for e in ok:
+            self.assertIsNone(agents.validate_control(rec(e)), e)
+        bad = [dict(core._holder("eoa"), kind="person"), dict(core._holder("eoa"), members=["0x1"]),
+               dict(core._holder("eoa"), threshold=1), dict(core._holder("timelock", min_delay_s=1), threshold=1),
+               dict(core._holder("account"), min_delay_s=1), dict(core._holder("eoa"), owner="0xO"),
+               core._holder("multisig", members=["0x2", "0x1"], threshold=1), core._holder("multisig", members=["0x1", "0x1"], threshold=1),
+               core._holder("multisig", members=["0x1", "0x2"], threshold=0), core._holder("multisig", members=["0x1", "0x2"], threshold=3),
+               core._holder("multisig", members=[], threshold=1), core._holder("multisig", members=["0x1"], threshold=True),
+               core._holder("multisig", members=["0x1"], threshold=1, min_delay_s=-1),
+               core._holder("timelock", min_delay_s=None), core._holder("timelock", min_delay_s=-1), core._holder("timelock", min_delay_s=True),
+               dict(core._holder("not_evaluated"), reason=None)]
+        for e in bad:
+            self.assertIsNotNone(agents.validate_control(rec(e)), e)
+        c = _ctl("0xH")
+        c["powers"]["mint"] = {"status": "absent", "holder": None, "source": None, "reason": None}
+        self.assertIsNotNone(agents.validate_control(c))                             # CR-5: absent says what was read
+
+    def test_malformed_baseline_record_is_refused(self):
+        """P6: a baseline whose control record breaks the specification is refused, nothing in it is compared."""
+        t = _token("ethereum", 1.0)
+        p = copy.deepcopy(t)
+        p["control"]["spec"] = "rwawatch-control/0"
+        v = agents._agent_control(_one_chain("ethereum", [t]), _one_chain("ethereum", [p]))
+        self.assertEqual(v[0], "ELEVATED")
+        self.assertIn("baseline control record refused", v[1])
+
+    def test_squads_account_out_of_shape_is_refused(self):
+        """CR-15: SILV's multisig bytes with the threshold set to 0, or above the number of members, do not decode."""
+        raw = bytearray(__import__("base64").b64decode(_vector("silv_squads_20260911")["multisig_account_today_base64"]))
+        self.assertEqual(core.decode_squads_multisig(bytes(raw))["threshold"], 3)            # positive control
+        for t in (0, 8):
+            r = bytearray(raw)
+            r[72:74] = t.to_bytes(2, "little")
+            with self.assertRaises(ValueError):
+                core.decode_squads_multisig(bytes(r))
+
+    def test_getowners_words_must_be_addresses(self):
+        """CR-14: an address[] word with bytes above the 20 of an address is not an owner list."""
+        H = core.HOLDER_SELECTORS
+        dirty = "0x" + "20".rjust(64, "0") + "1".rjust(64, "0") + ("ff" + "00" * 11 + "02" * 20)
+        core.rpc = self._rpc_with(calls={("0xS", "0x" + H["getOwners"]): dirty, ("0xS", "0x" + H["getThreshold"]): "0x" + "1".rjust(64, "0")})
+        self.assertNotEqual(core.evm_holder("ethereum", "0xS", "0x1")["kind"], "multisig")
 
     def test_missing_control_in_the_current_snapshot_is_refused(self):
         """CR-1 P6"""
