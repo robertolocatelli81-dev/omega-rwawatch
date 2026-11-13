@@ -1,6 +1,6 @@
 # The control record — specification `rwawatch-control/1`
 
-Status: draft for 0.3.0 (unreleased), written 2026-11-13 before the code that implements it.
+Status: normative from 0.3.0 (2026-11-13); written the same day before the code that implements it.
 
 A **control record** says, for one watched token at one recorded block (EVM), slot (Solana), ledger version (Aptos) or
 ledger (Stellar), **who can act on the token and under which guard**: who owns it, who can upgrade its code, mint,
